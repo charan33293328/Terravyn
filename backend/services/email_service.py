@@ -3,8 +3,56 @@ from email.message import EmailMessage
 import logging
 from database.connection import settings
 import os
+from email_validator import validate_email, EmailNotValidError, EmailSyntaxError, EmailUndeliverableError
+from fastapi import HTTPException, status
 
 logger = logging.getLogger("uvicorn.error")
+
+def validate_email_for_terravyn(email: str) -> str:
+    """
+    Validates an email address for Terravyn:
+    1. Checks for non-empty string.
+    2. Validates format and syntax.
+    3. Validates domain existence and MX deliverability via DNS.
+    Returns normalized email if valid, or raises HTTPException(400) with a user-friendly error message.
+    """
+    if not email or not isinstance(email, str) or not email.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email address is required."
+        )
+    
+    clean_email = email.strip()
+    try:
+        # check_deliverability=True performs DNS MX lookup
+        email_info = validate_email(clean_email, check_deliverability=True)
+        return email_info.normalized.lower()
+    except EmailSyntaxError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid email syntax: {str(e)}"
+        )
+    except EmailUndeliverableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Email domain is invalid or cannot receive mail: {str(e)}"
+        )
+    except EmailNotValidError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid email address: {str(e)}"
+        )
+    except Exception as e:
+        logger.warning(f"Email validation error for {clean_email}: {str(e)}")
+        try:
+            email_info = validate_email(clean_email, check_deliverability=False)
+            return email_info.normalized.lower()
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unable to validate email address: {str(e)}"
+            )
+
 
 def _send_smtp_message(msg: EmailMessage, recipient_email: str) -> bool:
     host = (settings.SMTP_HOST or "").strip()

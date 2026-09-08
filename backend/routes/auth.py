@@ -1,47 +1,116 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
 
 from database.connection import get_db, settings
 from schemas.domain import (
     UserCreate, UserResponse, Token, UserUpdate, 
-    UsernameCheckRequest, SendEmailOTPRequest, VerifyEmailOTPRequest, 
+    UsernameCheckRequest, CheckEmailRequest, SendEmailOTPRequest, VerifyEmailOTPRequest, 
     SendPhoneOTPRequest, VerifyPhoneOTPRequest, ForgotPasswordRequest, ResetPasswordRequest
 )
 import secrets
 from auth.security import get_password_hash, verify_password, create_access_token, get_current_active_user
 from models.domain import User, VerificationRecord
 from utils.verification import generate_otp, hash_otp, send_phone_otp
-from services.email_service import send_otp_email, send_password_reset_email
+from services.email_service import send_otp_email, send_password_reset_email, validate_email_for_terravyn
 from datetime import datetime, timedelta
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/check-username")
 def check_username(request: UsernameCheckRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == request.username).first()
+    clean_username = request.username.strip()
+    user = db.query(User).filter(func.lower(User.username) == clean_username.lower()).first()
     if user:
         return {"available": False}
     return {"available": True}
 
+@router.post("/login/check-email")
+@router.post("/check-email")
+def check_email_for_login(request: CheckEmailRequest, db: Session = Depends(get_db)):
+    """
+    Validates email format, domain, and MX deliverability,
+    and checks whether an active account exists in Terravyn.
+    """
+    raw_identifier = (request.email or "").strip()
+    if not raw_identifier:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please enter your email address or username."
+        )
+
+    if "@" in raw_identifier:
+        # Validate format, domain existence, and MX records via validate_email_for_terravyn
+        normalized_email = validate_email_for_terravyn(raw_identifier)
+        user = db.query(User).filter(func.lower(User.email) == normalized_email.lower()).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No Terravyn account found with this email address. Please check your email or create an account."
+            )
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This account has been deactivated. Please contact support."
+            )
+        return {
+            "success": True,
+            "registered": True,
+            "type": "email",
+            "email": normalized_email,
+            "full_name": user.full_name,
+            "message": "Email verified. Please enter your password."
+        }
+    else:
+        # Username check
+        user = db.query(User).filter(func.lower(User.username) == raw_identifier.lower()).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No Terravyn account found with this username. Please check your username or create an account."
+            )
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This account has been deactivated. Please contact support."
+            )
+        return {
+            "success": True,
+            "registered": True,
+            "type": "username",
+            "email": user.email,
+            "username": user.username,
+            "full_name": user.full_name,
+            "message": "Account verified. Please enter your password."
+        }
+
+@router.post("/register/request-email-verification")
 @router.post("/send-email-otp")
 def send_email_otp_route(request: SendEmailOTPRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == request.email).first()
+    # 1. Validate email syntax, domain existence, and MX deliverability
+    normalized_email = validate_email_for_terravyn(request.email)
+    
+    # 2. Check if an account is already registered with this email
+    user = db.query(User).filter(func.lower(User.email) == normalized_email.lower()).first()
     if user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="An account with this email already exists. Please login instead."
+        )
         
     otp = generate_otp()
     hashed = hash_otp(otp)
     
     # Clean expired records for this email
     db.query(VerificationRecord).filter(
-        VerificationRecord.identifier == request.email,
+        func.lower(VerificationRecord.identifier) == normalized_email.lower(),
         VerificationRecord.expires_at < datetime.utcnow()
     ).delete()
     
-    # Store OTP
+    # Store OTP (10 min expiry)
     record = VerificationRecord(
-        identifier=request.email,
+        identifier=normalized_email,
         otp_hash=hashed,
         otp_type="EMAIL",
         expires_at=datetime.utcnow() + timedelta(minutes=10)
@@ -49,7 +118,7 @@ def send_email_otp_route(request: SendEmailOTPRequest, db: Session = Depends(get
     db.add(record)
     db.commit()
     
-    email_sent = send_otp_email(request.email, otp, request.full_name)
+    email_sent = send_otp_email(normalized_email, otp, request.full_name)
     if email_sent:
         return {"message": "Verification OTP sent to your email successfully.", "email_sent": True}
     else:
@@ -59,30 +128,35 @@ def send_email_otp_route(request: SendEmailOTPRequest, db: Session = Depends(get
             "dev_otp": otp
         }
 
+@router.post("/register/verify-email")
 @router.post("/verify-email-otp")
 def verify_email_otp_route(request: VerifyEmailOTPRequest, db: Session = Depends(get_db)):
+    clean_email = (request.email or "").strip().lower()
+    if not clean_email:
+        raise HTTPException(status_code=400, detail="Email is required.")
+        
     record = db.query(VerificationRecord).filter(
-        VerificationRecord.identifier == request.email,
+        func.lower(VerificationRecord.identifier) == clean_email,
         VerificationRecord.otp_type == "EMAIL",
         VerificationRecord.verified == False,
         VerificationRecord.expires_at > datetime.utcnow()
     ).order_by(VerificationRecord.created_at.desc()).first()
     
     if not record:
-        raise HTTPException(status_code=400, detail="Invalid or expired OTP.")
+        raise HTTPException(status_code=400, detail="Invalid or expired verification code.")
         
     if record.attempt_count >= 5:
-        raise HTTPException(status_code=400, detail="Maximum verification attempts reached.")
+        raise HTTPException(status_code=400, detail="Maximum verification attempts reached. Please request a new code.")
         
     record.attempt_count += 1
     
-    if record.otp_hash != hash_otp(request.otp):
+    if record.otp_hash != hash_otp(request.otp.strip()):
         db.commit()
-        raise HTTPException(status_code=400, detail="Invalid or expired OTP.")
+        raise HTTPException(status_code=400, detail="Invalid verification code.")
         
     record.verified = True
     db.commit()
-    return {"message": "Email verified successfully."}
+    return {"message": "Email verified successfully.", "verified": True}
 
 @router.post("/send-phone-otp")
 def send_phone_otp_route(request: SendPhoneOTPRequest, db: Session = Depends(get_db)):
@@ -146,45 +220,49 @@ def verify_phone_otp_route(request: VerifyPhoneOTPRequest, db: Session = Depends
 
 @router.post("/register", response_model=UserResponse)
 def register_user(user: UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.email == user.email).first()
+    clean_email = user.email.strip().lower()
+    clean_username = user.username.strip()
+    clean_phone = user.phone_number.strip()
+
+    db_user = db.query(User).filter(func.lower(User.email) == clean_email).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="An account with this email already exists. Please login instead.")
         
-    db_username = db.query(User).filter(User.username == user.username).first()
+    db_username = db.query(User).filter(func.lower(User.username) == clean_username.lower()).first()
     if db_username:
-        raise HTTPException(status_code=400, detail="Username already registered")
+        raise HTTPException(status_code=400, detail="Username already registered.")
         
-    db_phone = db.query(User).filter(User.phone_number == user.phone_number).first()
+    db_phone = db.query(User).filter(User.phone_number == clean_phone).first()
     if db_phone:
-        raise HTTPException(status_code=400, detail="Phone number already registered")
+        raise HTTPException(status_code=400, detail="Phone number already registered.")
         
     # Check if email is verified
     email_record = db.query(VerificationRecord).filter(
-        VerificationRecord.identifier == user.email,
+        func.lower(VerificationRecord.identifier) == clean_email,
         VerificationRecord.otp_type == "EMAIL",
         VerificationRecord.verified == True
-    ).first()
+    ).order_by(VerificationRecord.created_at.desc()).first()
     
     if not email_record:
-        raise HTTPException(status_code=400, detail="Email not verified")
+        raise HTTPException(status_code=400, detail="Email verification is required before creating an account.")
         
     # Check if phone is verified
     phone_record = db.query(VerificationRecord).filter(
-        VerificationRecord.identifier == user.phone_number,
+        VerificationRecord.identifier == clean_phone,
         VerificationRecord.otp_type == "PHONE",
         VerificationRecord.verified == True
-    ).first()
+    ).order_by(VerificationRecord.created_at.desc()).first()
     
     if not phone_record:
-        raise HTTPException(status_code=400, detail="Phone number not verified")
+        raise HTTPException(status_code=400, detail="Phone number verification is required.")
     
     hashed_password = get_password_hash(user.password)
     db_user = User(
-        email=user.email,
-        username=user.username,
-        phone_number=user.phone_number,
+        email=clean_email,
+        username=clean_username,
+        phone_number=clean_phone,
         hashed_password=hashed_password,
-        full_name=user.full_name,
+        full_name=user.full_name.strip(),
         role=user.role,
         is_email_verified=True,
         is_phone_verified=True
@@ -193,8 +271,6 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_user)
     return db_user
-
-from sqlalchemy import or_, func
 
 @router.post("/login", response_model=Token)
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Leaf, Lock, User as UserIcon, Mail, ArrowRight, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { Leaf, Lock, User as UserIcon, Mail, ArrowRight, ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import api from '../api/axios';
 
 const Login = () => {
   const [step, setStep] = useState(1);
@@ -16,7 +17,7 @@ const Login = () => {
   const validateIdentifier = (value) => {
     const trimmed = value.trim();
     if (!trimmed) {
-      return { valid: false, message: 'Please enter your username or email address.' };
+      return { valid: false, message: 'Please enter your email address or username.' };
     }
 
     if (trimmed.includes('@')) {
@@ -37,7 +38,7 @@ const Login = () => {
     }
   };
 
-  const handleNext = (e) => {
+  const handleNext = async (e) => {
     e?.preventDefault();
     setError('');
     const validation = validateIdentifier(identifier);
@@ -45,11 +46,30 @@ const Login = () => {
       setError(validation.message);
       return;
     }
-    setStep(2);
+
+    setLoading(true);
+    try {
+      // Query backend to verify email syntax, domain deliverability (MX records), and account existence
+      const res = await api.post('/auth/login/check-email', { email: identifier.trim() });
+      if (res.data?.success || res.data?.registered) {
+        setStep(2);
+        setPassword('');
+        setError('');
+      } else {
+        setError(res.data?.message || 'No active account found with this email.');
+      }
+    } catch (err) {
+      const errorMsg = err.response?.data?.detail || 'Unable to verify email address. Please try again.';
+      setError(errorMsg);
+      setStep(1); // Ensure password field stays completely hidden
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleBack = () => {
     setError('');
+    setPassword('');
     setStep(1);
   };
 
@@ -151,10 +171,20 @@ const Login = () => {
               <div className="space-y-3">
                 <button
                   type="submit"
-                  className="w-full flex justify-center items-center gap-2 py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-brand hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand transition-colors"
+                  disabled={loading}
+                  className="w-full flex justify-center items-center gap-2 py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-brand hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
                 >
-                  <span>Continue</span>
-                  <ArrowRight className="w-4 h-4" />
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Verifying Email...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Continue</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
                 
                 <button

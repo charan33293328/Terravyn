@@ -17,16 +17,19 @@ class UserCreate(UserBase):
     phone_number: str
     password: str
 
+class CheckEmailRequest(BaseModel):
+    email: str
+
 class UsernameCheckRequest(BaseModel):
     username: str
 
 class SendEmailOTPRequest(BaseModel):
-    email: EmailStr
+    email: str
     full_name: str
     username: str
 
 class VerifyEmailOTPRequest(BaseModel):
-    email: EmailStr
+    email: str
     otp: str
 
 class SendPhoneOTPRequest(BaseModel):
@@ -37,10 +40,10 @@ class VerifyPhoneOTPRequest(BaseModel):
     otp: str
 
 class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
+    email: str
 
 class ResetPasswordRequest(BaseModel):
-    email: EmailStr
+    email: str
     token: str
     new_password: str
 
