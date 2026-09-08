@@ -13,3 +13,7 @@ backend/uploads/
 
 # Local frontend environment
 frontend/.env
+
+aiven-ca.pem
+terravyn_backup.sql
+frontend/.env.production
