@@ -15,7 +15,8 @@ const CustomerOrderDetails = () => {
     const fetchOrderDetails = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch(`http://localhost:8000/api/user/orders/${orderId}`, {
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+        const res = await fetch(`${baseUrl}/api/user/orders/${orderId}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -160,14 +161,20 @@ const CustomerOrderDetails = () => {
               <p className="text-sm text-slate-500 mb-3">{invoice.invoice_number}</p>
               
               <button 
-                onClick={() => window.open(`http://localhost:8000/api/invoices/${order.order_id}/view`, '_blank')}
+                onClick={() => {
+                  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+                  window.open(`${baseUrl}/api/invoices/${order.order_id}/view`, '_blank');
+                }}
                 className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors text-sm flex items-center justify-center gap-2"
               >
                 <FileText size={16} /> View Online
               </button>
               
               <button 
-                onClick={() => window.open(`http://localhost:8000/api/invoices/${order.order_id}/download`, '_blank')}
+                onClick={() => {
+                  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+                  window.open(`${baseUrl}/api/invoices/${order.order_id}/download`, '_blank');
+                }}
                 className="w-full py-2 bg-brand/10 hover:bg-brand/20 text-brand font-medium rounded-lg transition-colors text-sm flex items-center justify-center gap-2"
               >
                 <Download size={16} /> Download PDF

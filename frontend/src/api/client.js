@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+
 const apiClient = axios.create({
-  baseURL: 'http://localhost:8000/api', // Backend base URL
+  baseURL: `${API_BASE_URL}/api`, // Backend base URL
   headers: {
     'Content-Type': 'application/json',
   },

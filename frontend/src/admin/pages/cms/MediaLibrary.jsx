@@ -125,8 +125,8 @@ const MediaLibrary = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {media.map((asset) => {
             const Icon = getIcon(asset.file_type);
-            const isImage = asset.file_type.startsWith('image/');
-            const fullUrl = 'http://127.0.0.1:8000' + asset.file_path; // Dev fallback if proxy not rewriting static correctly. Actually should be standard.
+            const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+            const fullUrl = asset.file_path.startsWith('http') ? asset.file_path : `${baseUrl}${asset.file_path}`;
             
             return (
               <div key={asset.id} className="group relative bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden hover:border-brand transition-colors">

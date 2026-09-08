@@ -82,7 +82,7 @@ const OrderDetails = () => {
   const handleViewDocument = () => {
     try {
       const token = localStorage.getItem('token');
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
       window.open(`${baseUrl}/api/admin/orders/${id}/aadhaar-document?token=${token}`, '_blank');
     } catch (err) {
       console.error("Failed to open document", err);

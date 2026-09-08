@@ -167,7 +167,7 @@ const BlogManager = () => {
                     className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/50 mb-2"
                   />
                   {featuredImage && (
-                    <img src={featuredImage.startsWith('http') ? featuredImage : `http://127.0.0.1:8000${featuredImage}`} alt="Preview" className="w-full h-32 object-cover rounded-xl border border-slate-200 dark:border-slate-800" />
+                    <img src={featuredImage.startsWith('http') ? featuredImage : `${import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com'}${featuredImage}`} alt="Preview" className="w-full h-32 object-cover rounded-xl border border-slate-200 dark:border-slate-800" />
                   )}
                   <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Tip: Upload images via Media Library and copy the URL.</p>
                 </div>
@@ -206,7 +206,7 @@ const BlogManager = () => {
             <div key={blog.id} className="bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden hover:border-slate-300 transition-colors group">
               {blog.featured_image ? (
                 <div className="aspect-video bg-slate-200 relative">
-                  <img src={blog.featured_image.startsWith('http') ? blog.featured_image : `http://127.0.0.1:8000${blog.featured_image}`} alt={blog.title} className="w-full h-full object-cover" />
+                  <img src={blog.featured_image.startsWith('http') ? blog.featured_image : `${import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com'}${blog.featured_image}`} alt={blog.title} className="w-full h-full object-cover" />
                 </div>
               ) : (
                 <div className="aspect-video bg-slate-200 flex items-center justify-center">

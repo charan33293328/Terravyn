@@ -20,8 +20,10 @@ export const useDeviceWebSocket = (deviceId) => {
     fetchInitial();
 
     const connect = () => {
-      // In production, use wss:// and the actual host
-      const wsUrl = `ws://localhost:8000/api/device/ws/${deviceId}`;
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+      const wsProtocol = baseUrl.startsWith('https') ? 'wss:' : 'ws:';
+      const host = baseUrl.replace(/^https?:\/\//, '');
+      const wsUrl = `${wsProtocol}//${host}/api/device/ws/${deviceId}`;
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {

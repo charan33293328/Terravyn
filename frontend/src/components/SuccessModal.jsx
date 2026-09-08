@@ -6,10 +6,12 @@ const SuccessModal = ({ isOpen, onClose, orderDetails }) => {
   const [invoice, setInvoice] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+
   useEffect(() => {
     if (isOpen && orderDetails?.order_id) {
       // Fetch invoice details
-      fetch(`http://localhost:8000/api/invoices/${orderDetails.order_id}`)
+      fetch(`${baseUrl}/api/invoices/${orderDetails.order_id}`)
         .then(res => res.json())
         .then(data => {
           setInvoice(data);
@@ -20,16 +22,16 @@ const SuccessModal = ({ isOpen, onClose, orderDetails }) => {
           setLoading(false);
         });
     }
-  }, [isOpen, orderDetails]);
+  }, [isOpen, orderDetails, baseUrl]);
 
   if (!isOpen) return null;
 
   const handleDownload = () => {
-    window.open(`http://localhost:8000/api/invoices/${orderDetails.order_id}/download`, '_blank');
+    window.open(`${baseUrl}/api/invoices/${orderDetails.order_id}/download`, '_blank');
   };
 
   const handleView = () => {
-    window.open(`http://localhost:8000/api/invoices/${orderDetails.order_id}/view`, '_blank');
+    window.open(`${baseUrl}/api/invoices/${orderDetails.order_id}/view`, '_blank');
   };
 
   const isOnline = orderDetails?.payment_method === 'ONLINE';
