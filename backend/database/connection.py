@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     SMTP_FROM_NAME: str = "TERRAVYN"
     SMTP_USE_TLS: bool = True
     
+    # Modern HTTP Email Delivery APIs (Supported by Render/Cloud platforms over HTTPS port 443)
+    RESEND_API_KEY: str = ""
+    BREVO_API_KEY: str = ""
+    SENDGRID_API_KEY: str = ""
+    
     FRONTEND_URL: str = "https://terravyn.vercel.app"
     
     TWILIO_ACCOUNT_SID: str = ""

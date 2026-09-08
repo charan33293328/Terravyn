@@ -259,15 +259,10 @@ const Signup = () => {
         emailResends: prev.emailOtpSent ? prev.emailResends + 1 : prev.emailResends
       }));
       setTimers(prev => ({ ...prev, email: 60 }));
-      if (res.data?.dev_otp) {
-        setOtps(prev => ({ ...prev, email: res.data.dev_otp }));
-        setSuccess(`Verification code generated: ${res.data.dev_otp}`);
-      } else {
-        setSuccess('Verification OTP sent to your email.');
-      }
+      setSuccess('Verification code sent to your email.');
       setTimeout(() => setSuccess(''), 5000);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to send Email OTP.');
+      setError(err.response?.data?.detail || 'Failed to send verification code. Please try again later.');
     } finally {
       setLoading(false);
     }
@@ -316,7 +311,7 @@ const Signup = () => {
     setLoading(true);
     try {
       const formattedPhone = `+91${formData.phone_number.trim()}`;
-      const res = await api.post('/auth/send-phone-otp', {
+      await api.post('/auth/send-phone-otp', {
         phone_number: formattedPhone
       });
       setStatus(prev => ({ 
@@ -325,15 +320,10 @@ const Signup = () => {
         phoneResends: prev.phoneOtpSent ? prev.phoneResends + 1 : prev.phoneResends
       }));
       setTimers(prev => ({ ...prev, phone: 60 }));
-      if (res.data?.dev_otp) {
-        setOtps(prev => ({ ...prev, phone: res.data.dev_otp }));
-        setSuccess(`Verification code generated: ${res.data.dev_otp}`);
-      } else {
-        setSuccess('SMS OTP sent successfully.');
-      }
+      setSuccess('SMS verification code sent successfully.');
       setTimeout(() => setSuccess(''), 5000);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to send SMS OTP.');
+      setError(err.response?.data?.detail || 'Failed to send SMS verification code.');
     } finally {
       setLoading(false);
     }

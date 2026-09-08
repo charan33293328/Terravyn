@@ -102,13 +102,20 @@ def send_email_otp_route(request: SendEmailOTPRequest, db: Session = Depends(get
     otp = generate_otp()
     hashed = hash_otp(otp)
     
-    # Clean expired records for this email
+    # 3. Attempt email delivery first
+    email_sent = send_otp_email(normalized_email, otp, request.full_name)
+    if not email_sent:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="We couldn't send the verification code right now. Please try again later."
+        )
+    
+    # 4. Clean expired records for this email and store new record upon successful delivery
     db.query(VerificationRecord).filter(
         func.lower(VerificationRecord.identifier) == normalized_email.lower(),
         VerificationRecord.expires_at < datetime.utcnow()
     ).delete()
     
-    # Store OTP (10 min expiry)
     record = VerificationRecord(
         identifier=normalized_email,
         otp_hash=hashed,
@@ -118,15 +125,7 @@ def send_email_otp_route(request: SendEmailOTPRequest, db: Session = Depends(get
     db.add(record)
     db.commit()
     
-    email_sent = send_otp_email(normalized_email, otp, request.full_name)
-    if email_sent:
-        return {"message": "Verification OTP sent to your email successfully.", "email_sent": True}
-    else:
-        return {
-            "message": f"Verification code generated (Test/Dev mode OTP: {otp})",
-            "email_sent": False,
-            "dev_otp": otp
-        }
+    return {"message": "Verification code sent to your email successfully.", "email_sent": True}
 
 @router.post("/register/verify-email")
 @router.post("/verify-email-otp")
@@ -160,22 +159,30 @@ def verify_email_otp_route(request: VerifyEmailOTPRequest, db: Session = Depends
 
 @router.post("/send-phone-otp")
 def send_phone_otp_route(request: SendPhoneOTPRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.phone_number == request.phone_number).first()
+    clean_phone = request.phone_number.strip()
+    user = db.query(User).filter(User.phone_number == clean_phone).first()
     if user:
         raise HTTPException(status_code=400, detail="Phone number already registered")
         
     otp = generate_otp()
     hashed = hash_otp(otp)
     
+    sms_sent = send_phone_otp(clean_phone, otp)
+    if not sms_sent or not settings.TWILIO_ACCOUNT_SID:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="We couldn't send the verification SMS right now. Please try again later."
+        )
+    
     # Clean expired records for this phone number
     db.query(VerificationRecord).filter(
-        VerificationRecord.identifier == request.phone_number,
+        VerificationRecord.identifier == clean_phone,
         VerificationRecord.expires_at < datetime.utcnow()
     ).delete()
     
     # Store OTP
     record = VerificationRecord(
-        identifier=request.phone_number,
+        identifier=clean_phone,
         otp_hash=hashed,
         otp_type="PHONE",
         expires_at=datetime.utcnow() + timedelta(minutes=10)
@@ -183,15 +190,7 @@ def send_phone_otp_route(request: SendPhoneOTPRequest, db: Session = Depends(get
     db.add(record)
     db.commit()
     
-    sms_sent = send_phone_otp(request.phone_number, otp)
-    if sms_sent and settings.TWILIO_ACCOUNT_SID:
-        return {"message": "Verification code sent to your mobile phone.", "sms_sent": True}
-    else:
-        return {
-            "message": f"Verification code generated (Test/Dev mode OTP: {otp})",
-            "sms_sent": False,
-            "dev_otp": otp
-        }
+    return {"message": "Verification code sent to your mobile phone.", "sms_sent": True}
 
 @router.post("/verify-phone-otp")
 def verify_phone_otp_route(request: VerifyPhoneOTPRequest, db: Session = Depends(get_db)):
@@ -336,13 +335,14 @@ def forgot_password_route(request: ForgotPasswordRequest, db: Session = Depends(
     reset_link = f"{frontend_url}/reset-password?email={user.email}&token={token}"
     
     email_sent = send_password_reset_email(user.email, reset_link, user.full_name)
-    if email_sent:
-        return {"message": "If an account with that email exists, we sent a password reset link."}
-    else:
-        return {
-            "message": "Password reset link generated. (Test/Dev mode active)",
-            "reset_link": reset_link
-        }
+    if not email_sent:
+        logger.error(f"[FORGOT_PASSWORD] Failed to deliver password reset email to {user.email}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="We couldn't send the password reset email right now. Please try again later."
+        )
+        
+    return {"message": "If an account with that email exists, we sent a password reset link."}
 
 @router.post("/reset-password")
 def reset_password_route(request: ResetPasswordRequest, db: Session = Depends(get_db)):

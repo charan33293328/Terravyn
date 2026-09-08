@@ -1,11 +1,8 @@
-import random
-import string
+import secrets
 import hashlib
 from fastapi import HTTPException
 from database.connection import settings
 import logging
-
-
 
 # Twilio SDK
 from twilio.rest import Client
@@ -13,24 +10,22 @@ from twilio.base.exceptions import TwilioRestException
 
 logger = logging.getLogger(__name__)
 
-# Generate a 6-digit OTP
+# Generate a cryptographically secure 6-digit OTP
 def generate_otp() -> str:
-    return ''.join(random.choices(string.digits, k=6))
+    return f"{secrets.randbelow(1000000):06d}"
 
 def hash_otp(otp: str) -> str:
     return hashlib.sha256(otp.encode()).hexdigest()
 
-
 def send_phone_otp(phone_number: str, otp: str) -> bool:
     """Uses Twilio Programmable SMS API to send SMS OTP"""
-    account_sid = settings.TWILIO_ACCOUNT_SID
-    auth_token = settings.TWILIO_AUTH_TOKEN
-    twilio_phone = settings.TWILIO_PHONE_NUMBER
+    account_sid = (settings.TWILIO_ACCOUNT_SID or "").strip()
+    auth_token = (settings.TWILIO_AUTH_TOKEN or "").strip()
+    twilio_phone = (settings.TWILIO_PHONE_NUMBER or "").strip()
     
     if not account_sid or not auth_token or not twilio_phone:
-        # Fallback for local development if not configured
-        logger.warning(f"DEV MODE: Phone OTP for {phone_number} is {otp}")
-        return True
+        logger.warning(f"[SMS UNCONFIGURED] Twilio credentials missing. Cannot send SMS to {phone_number}")
+        return False
         
     try:
         client = Client(account_sid, auth_token)

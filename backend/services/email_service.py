@@ -54,6 +54,120 @@ def validate_email_for_terravyn(email: str) -> str:
             )
 
 
+import socket
+import ssl
+import json
+import urllib.request
+import urllib.error
+
+def _send_http_api_email(recipient_email: str, subject: str, plain_text: str, html_content: str) -> bool:
+    """
+    Sends email via HTTPS API (Port 443).
+    Supported by cloud runtimes (Render, Vercel, AWS, etc.) where outbound SMTP ports (25, 465, 587) are blocked.
+    """
+    from_name = (settings.SMTP_FROM_NAME or "TERRAVYN").strip()
+    from_email = (settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME or "notifications@terravyn.com").strip()
+    
+    # 1. Resend API (https://resend.com)
+    resend_key = (settings.RESEND_API_KEY or "").strip()
+    if resend_key:
+        try:
+            logger.info(f"[EMAIL HTTP API] Dispatching email via Resend API to {recipient_email}...")
+            payload = {
+                "from": f"{from_name} <{from_email}>",
+                "to": [recipient_email],
+                "subject": subject,
+                "text": plain_text,
+                "html": html_content
+            }
+            req = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {resend_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "TERRAVYN/1.0"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=15) as response:
+                if response.status in (200, 201):
+                    logger.info(f"[EMAIL HTTP SUCCESS] Delivered via Resend to {recipient_email}")
+                    return True
+        except urllib.error.HTTPError as http_err:
+            err_body = http_err.read().decode("utf-8", errors="ignore")
+            logger.error(f"[EMAIL RESEND ERROR] HTTP {http_err.code}: {err_body}")
+        except Exception as e:
+            logger.error(f"[EMAIL RESEND ERROR] {type(e).__name__}: {str(e)}")
+
+    # 2. Brevo API (https://brevo.com / Sendinblue)
+    brevo_key = (settings.BREVO_API_KEY or "").strip()
+    if brevo_key:
+        try:
+            logger.info(f"[EMAIL HTTP API] Dispatching email via Brevo API to {recipient_email}...")
+            payload = {
+                "sender": {"name": from_name, "email": from_email},
+                "to": [{"email": recipient_email}],
+                "subject": subject,
+                "textContent": plain_text,
+                "htmlContent": html_content
+            }
+            req = urllib.request.Request(
+                "https://api.brevo.com/v3/smtp/email",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "api-key": brevo_key,
+                    "Content-Type": "application/json",
+                    "User-Agent": "TERRAVYN/1.0"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=15) as response:
+                if response.status in (200, 201):
+                    logger.info(f"[EMAIL HTTP SUCCESS] Delivered via Brevo to {recipient_email}")
+                    return True
+        except urllib.error.HTTPError as http_err:
+            err_body = http_err.read().decode("utf-8", errors="ignore")
+            logger.error(f"[EMAIL BREVO ERROR] HTTP {http_err.code}: {err_body}")
+        except Exception as e:
+            logger.error(f"[EMAIL BREVO ERROR] {type(e).__name__}: {str(e)}")
+
+    # 3. SendGrid API
+    sendgrid_key = (settings.SENDGRID_API_KEY or "").strip()
+    if sendgrid_key:
+        try:
+            logger.info(f"[EMAIL HTTP API] Dispatching email via SendGrid API to {recipient_email}...")
+            payload = {
+                "personalizations": [{"to": [{"email": recipient_email}]}],
+                "from": {"email": from_email, "name": from_name},
+                "subject": subject,
+                "content": [
+                    {"type": "text/plain", "value": plain_text},
+                    {"type": "text/html", "value": html_content}
+                ]
+            }
+            req = urllib.request.Request(
+                "https://api.sendgrid.com/v3/mail/send",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {sendgrid_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "TERRAVYN/1.0"
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=15) as response:
+                if response.status in (200, 202):
+                    logger.info(f"[EMAIL HTTP SUCCESS] Delivered via SendGrid to {recipient_email}")
+                    return True
+        except urllib.error.HTTPError as http_err:
+            err_body = http_err.read().decode("utf-8", errors="ignore")
+            logger.error(f"[EMAIL SENDGRID ERROR] HTTP {http_err.code}: {err_body}")
+        except Exception as e:
+            logger.error(f"[EMAIL SENDGRID ERROR] {type(e).__name__}: {str(e)}")
+
+    return False
+
 def _send_smtp_message(msg: EmailMessage, recipient_email: str) -> bool:
     host = (settings.SMTP_HOST or "").strip()
     username = (settings.SMTP_USERNAME or "").strip()
@@ -71,40 +185,75 @@ def _send_smtp_message(msg: EmailMessage, recipient_email: str) -> bool:
 
     # Strategies to try in order: (use_ssl, port)
     if configured_port == 465:
-        strategies = [(True, 465), (False, 587)]
+        strategies = [(True, 465), (False, 587), (False, 2525)]
+    elif configured_port == 2525:
+        strategies = [(False, 2525), (False, 587), (True, 465)]
     else:
-        strategies = [(False, configured_port), (True, 465)]
+        strategies = [(False, configured_port), (True, 465), (False, 2525)]
 
-    last_error = None
+    last_error_stage = None
+    last_error_message = None
+
     for use_ssl, try_port in strategies:
         try:
-            logger.info(f"[SMTP ATTEMPT] Connecting to {host}:{try_port} (SSL={use_ssl}) for {recipient_email}...")
+            logger.info(f"[SMTP ATTEMPT] stage=CONNECT host={host} port={try_port} ssl={use_ssl}")
+            
+            # Step 1: TCP Socket connection
             if use_ssl:
-                server = smtplib.SMTP_SSL(host, try_port, timeout=15)
+                server = smtplib.SMTP_SSL(host, try_port, timeout=12)
             else:
-                server = smtplib.SMTP(host, try_port, timeout=15)
+                server = smtplib.SMTP(host, try_port, timeout=12)
                 server.ehlo()
+                
+                # Step 2: STARTTLS negotiation
                 if settings.SMTP_USE_TLS or try_port == 587:
                     server.starttls()
                     server.ehlo()
             
+            # Step 3: SMTP Authentication & Send
             with server:
                 server.login(username, password)
                 server.send_message(msg)
             
             logger.info(f"[SMTP SUCCESS] Email successfully delivered to {recipient_email} via {host}:{try_port}")
             return True
-        except smtplib.SMTPAuthenticationError as auth_err:
-            logger.error(f"[SMTP AUTH FAILED] Authentication failed for user '{username}' on {host}:{try_port}. Error: {str(auth_err)}")
-            last_error = auth_err
-            # Break if authentication specifically fails (e.g. wrong app password)
-            break
-        except Exception as e:
-            logger.warning(f"[SMTP STRATEGY FAILED] Connection to {host}:{try_port} failed: {str(e)}")
-            last_error = e
 
-    logger.error(f"[SMTP DELIVERY FAILED] Could not send email to {recipient_email}. Last error: {str(last_error)}")
+        except socket.gaierror as dns_err:
+            last_error_stage = "DNS_RESOLUTION"
+            last_error_message = f"DNS lookup failed for host '{host}': {str(dns_err)}"
+            logger.error(f"[SMTP DNS FAILED] stage={last_error_stage} host={host} error={str(dns_err)}")
+            break # No point retrying other ports if DNS fails
+
+        except smtplib.SMTPAuthenticationError as auth_err:
+            last_error_stage = "SMTP_AUTH"
+            last_error_message = f"Authentication rejected by {host}:{try_port}. Verify email credentials/App Password."
+            logger.error(f"[SMTP AUTH FAILED] stage={last_error_stage} host={host} port={try_port} error={auth_err.smtp_code} {auth_err.smtp_error}")
+            break # Credentials invalid, no need to retry
+
+        except (socket.timeout, TimeoutError) as timeout_err:
+            last_error_stage = "TCP_TIMEOUT"
+            last_error_message = f"Connection to {host}:{try_port} timed out."
+            logger.warning(f"[SMTP TIMEOUT] stage={last_error_stage} host={host} port={try_port}")
+
+        except OSError as net_err:
+            last_error_stage = "NETWORK_UNREACHABLE"
+            last_error_message = f"Network unreachable to {host}:{try_port} (Outbound SMTP port blocked by host/environment): {str(net_err)}"
+            logger.warning(f"[SMTP NETWORK FAILED] stage={last_error_stage} host={host} port={try_port} error={str(net_err)}")
+
+        except Exception as e:
+            last_error_stage = type(e).__name__
+            last_error_message = str(e)
+            logger.warning(f"[SMTP ERROR] stage={last_error_stage} host={host} port={try_port} error={str(e)}")
+
+    logger.error(f"[SMTP DELIVERY FAILED] recipient={recipient_email} stage={last_error_stage} error={last_error_message}")
     return False
+
+def _dispatch_email(msg: EmailMessage, recipient_email: str, subject: str, plain_text: str, html_content: str) -> bool:
+    """Dispatches email via HTTPS API if configured, otherwise falls back to SMTP."""
+    if settings.RESEND_API_KEY or settings.BREVO_API_KEY or settings.SENDGRID_API_KEY:
+        if _send_http_api_email(recipient_email, subject, plain_text, html_content):
+            return True
+    return _send_smtp_message(msg, recipient_email)
 
 def send_invoice_email(customer_email: str, customer_name: str, order_id: str, invoice_number: str, payment_status: str, pdf_path: str):
     from_name = (settings.SMTP_FROM_NAME or "TERRAVYN").strip()
@@ -206,7 +355,7 @@ def send_otp_email(recipient_email: str, otp: str, recipient_name: str) -> bool:
 </html>"""
 
     msg.add_alternative(html_body, subtype='html')
-    return _send_smtp_message(msg, recipient_email)
+    return _dispatch_email(msg, recipient_email, msg['Subject'], plain_text, html_body)
 
 def send_password_reset_email(recipient_email: str, reset_link: str, recipient_name: str) -> bool:
     from_name = (settings.SMTP_FROM_NAME or "TERRAVYN").strip()
@@ -240,5 +389,5 @@ def send_password_reset_email(recipient_email: str, reset_link: str, recipient_n
 </html>"""
 
     msg.add_alternative(html_body, subtype='html')
-    return _send_smtp_message(msg, recipient_email)
+    return _dispatch_email(msg, recipient_email, msg['Subject'], plain_text, html_body)
 
