@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-brand: #0A7D40;
+  --color-brand-dark: #075e30;
+  --color-brand-light: #e0f2fe;
+}
+
+@layer base {
+  body {
+    background-color: #f8fafc;
+    color: #1e293b;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

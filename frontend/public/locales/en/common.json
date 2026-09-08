@@ -1,0 +1,50 @@
+{
+  "nav": {
+    "home": "Home",
+    "features": "Features",
+    "howItWorks": "How it Works",
+    "pricing": "Pricing",
+    "login": "Login",
+    "getStarted": "Get Started"
+  },
+  "hero": {
+    "title": "TERRAVYN",
+    "subtitle": "AI-Powered Smart Agriculture & Intelligent Irrigation Platform",
+    "desc": "Transforming farming through IoT-driven monitoring, precision irrigation, and sustainable innovation.",
+    "getStarted": "Get Started",
+    "exploreDashboard": "Explore Dashboard",
+    "scroll": "Scroll"
+  },
+  "features": {
+    "title": "Advanced Capabilities",
+    "subtitle": "Everything you need to monitor and control your farm from anywhere.",
+    "f1_title": "Precision Irrigation",
+    "f1_desc": "Automate your watering schedules based on real-time soil moisture and hyper-local weather forecasting.",
+    "f2_title": "Live Telemetry",
+    "f2_desc": "View up-to-the-second data streams from your ESP32 sensors straight into your dashboard via WebSockets.",
+    "f3_title": "Instant Alerts",
+    "f3_desc": "Receive instant notifications for offline devices, pump failures, or critical moisture levels."
+  },
+  "howItWorks": {
+    "title": "How TERRAVYN Works",
+    "subtitle": "Get started with TERRAVYN in just a few simple steps.",
+    "step1_title": "Purchase Your TERRAVYN Device",
+    "step1_desc": "Choose the TERRAVYN smart irrigation device that suits your farming needs.",
+    "step2_title": "Connect to WiFi",
+    "step2_desc": "Power on the device and connect it to your farm's WiFi network using the simple setup process.",
+    "step3_title": "Create Your Account",
+    "step3_desc": "Register and log in to the TERRAVYN platform to access your personal dashboard.",
+    "step4_title": "Add Your Device",
+    "step4_desc": "Scan the QR code provided with your TERRAVYN device to securely link it to your account.",
+    "step5_title": "Monitor Your Farm",
+    "step5_desc": "View soil moisture, weather conditions, and device status in real time.",
+    "step6_title": "Automate Irrigation",
+    "step6_desc": "Enable automatic irrigation or manually control your pump directly from the TERRAVYN dashboard.",
+    "videoTitle": "See TERRAVYN in Action",
+    "videoDesc": "Watch how farmers can set up TERRAVYN and begin smart farming within minutes.",
+    "videoFallback": "If the video cannot be loaded, please refresh the page."
+  },
+  "footer": {
+    "rights": "© 2026 TERRAVYN Technologies. All rights reserved."
+  }
+}
