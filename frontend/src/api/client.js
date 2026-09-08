@@ -48,10 +48,13 @@ apiClient.interceptors.response.use((response) => {
   }
   return response;
 }, (error) => {
-  if (error.response && error.response.status === 401) {
+  const isAuthLoginRequest = error.config?.url?.includes('/auth/login');
+  if (error.response && error.response.status === 401 && !isAuthLoginRequest) {
     // Token is invalid or expired
     localStorage.removeItem('token');
-    window.location.href = '/login';
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
   }
   return Promise.reject(error);
 });
