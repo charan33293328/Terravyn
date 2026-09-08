@@ -4,3 +4,12 @@ frontend/public/videos/onboarding-mr.mp4
 frontend/public/videos/onboarding-hi.mp4
 frontend/public/videos/onboarding-kn.mp4
 frontend/public/videos/onboarding-ta.mp4
+# Local backend runtime files
+backend/.env
+backend/**/__pycache__/
+backend/terravyn.db
+backend/static/
+backend/uploads/
+
+# Local frontend environment
+frontend/.env
