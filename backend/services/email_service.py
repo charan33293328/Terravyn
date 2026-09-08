@@ -62,19 +62,29 @@ import urllib.error
 
 def _send_http_api_email(recipient_email: str, subject: str, plain_text: str, html_content: str) -> bool:
     """
-    Sends email via HTTPS API (Port 443).
+    Sends transactional email via HTTPS REST API (Port 443).
     Supported by cloud runtimes (Render, Vercel, AWS, etc.) where outbound SMTP ports (25, 465, 587) are blocked.
     """
-    from_name = (settings.SMTP_FROM_NAME or "TERRAVYN").strip()
-    from_email = (settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME or "notifications@terravyn.com").strip()
+    from_name = (settings.EMAIL_FROM_NAME or settings.SMTP_FROM_NAME or "TERRAVYN").strip()
+    from_email = (settings.EMAIL_FROM or settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME or "onboarding@resend.dev").strip()
     
-    # 1. Resend API (https://resend.com)
-    resend_key = (settings.RESEND_API_KEY or "").strip()
+    # Check keys
+    generic_key = (settings.EMAIL_API_KEY or "").strip()
+    resend_key = (settings.RESEND_API_KEY or "").strip() or (generic_key if generic_key.startswith("re_") or not generic_key.startswith(("xkeysib-", "SG.")) else "")
+    brevo_key = (settings.BREVO_API_KEY or "").strip() or (generic_key if generic_key.startswith("xkeysib-") else "")
+    sendgrid_key = (settings.SENDGRID_API_KEY or "").strip() or (generic_key if generic_key.startswith("SG.") else "")
+    
+    # 1. Resend API (https://resend.com) - Primary HTTPS Provider
     if resend_key:
         try:
             logger.info(f"[EMAIL HTTP API] Dispatching email via Resend API to {recipient_email}...")
+            # If from_email is a standard gmail address and domain isn't verified on Resend, Resend requires onboarding@resend.dev for testing
+            sender_address = from_email
+            if "@gmail.com" in sender_address.lower() or "@yahoo." in sender_address.lower():
+                sender_address = "onboarding@resend.dev"
+                
             payload = {
-                "from": f"{from_name} <{from_email}>",
+                "from": f"{from_name} <{sender_address}>",
                 "to": [recipient_email],
                 "subject": subject,
                 "text": plain_text,
@@ -92,7 +102,7 @@ def _send_http_api_email(recipient_email: str, subject: str, plain_text: str, ht
             )
             with urllib.request.urlopen(req, timeout=15) as response:
                 if response.status in (200, 201):
-                    logger.info(f"[EMAIL HTTP SUCCESS] Delivered via Resend to {recipient_email}")
+                    logger.info(f"[EMAIL HTTP SUCCESS] Verification email delivered via Resend to {recipient_email}")
                     return True
         except urllib.error.HTTPError as http_err:
             err_body = http_err.read().decode("utf-8", errors="ignore")
@@ -101,7 +111,6 @@ def _send_http_api_email(recipient_email: str, subject: str, plain_text: str, ht
             logger.error(f"[EMAIL RESEND ERROR] {type(e).__name__}: {str(e)}")
 
     # 2. Brevo API (https://brevo.com / Sendinblue)
-    brevo_key = (settings.BREVO_API_KEY or "").strip()
     if brevo_key:
         try:
             logger.info(f"[EMAIL HTTP API] Dispatching email via Brevo API to {recipient_email}...")
@@ -124,7 +133,7 @@ def _send_http_api_email(recipient_email: str, subject: str, plain_text: str, ht
             )
             with urllib.request.urlopen(req, timeout=15) as response:
                 if response.status in (200, 201):
-                    logger.info(f"[EMAIL HTTP SUCCESS] Delivered via Brevo to {recipient_email}")
+                    logger.info(f"[EMAIL HTTP SUCCESS] Verification email delivered via Brevo to {recipient_email}")
                     return True
         except urllib.error.HTTPError as http_err:
             err_body = http_err.read().decode("utf-8", errors="ignore")
@@ -133,7 +142,6 @@ def _send_http_api_email(recipient_email: str, subject: str, plain_text: str, ht
             logger.error(f"[EMAIL BREVO ERROR] {type(e).__name__}: {str(e)}")
 
     # 3. SendGrid API
-    sendgrid_key = (settings.SENDGRID_API_KEY or "").strip()
     if sendgrid_key:
         try:
             logger.info(f"[EMAIL HTTP API] Dispatching email via SendGrid API to {recipient_email}...")
@@ -158,7 +166,7 @@ def _send_http_api_email(recipient_email: str, subject: str, plain_text: str, ht
             )
             with urllib.request.urlopen(req, timeout=15) as response:
                 if response.status in (200, 202):
-                    logger.info(f"[EMAIL HTTP SUCCESS] Delivered via SendGrid to {recipient_email}")
+                    logger.info(f"[EMAIL HTTP SUCCESS] Verification email delivered via SendGrid to {recipient_email}")
                     return True
         except urllib.error.HTTPError as http_err:
             err_body = http_err.read().decode("utf-8", errors="ignore")
