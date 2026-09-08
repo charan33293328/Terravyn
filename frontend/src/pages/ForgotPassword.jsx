@@ -6,6 +6,7 @@ import api from '../api/axios';
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
+  const [resetLink, setResetLink] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -13,11 +14,15 @@ const ForgotPassword = () => {
     e.preventDefault();
     setError('');
     setMessage('');
+    setResetLink('');
     setLoading(true);
     
     try {
-      const response = await api.post('/auth/forgot-password', { email });
+      const response = await api.post('/auth/forgot-password', { email: email.trim() });
       setMessage(response.data.message || 'If an account with that email exists, we sent a password reset link.');
+      if (response.data.reset_link) {
+        setResetLink(response.data.reset_link);
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to send reset link. Please try again later.');
     } finally {
@@ -50,8 +55,18 @@ const ForgotPassword = () => {
               </div>
             )}
             {message && (
-              <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg text-sm">
-                {message}
+              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm space-y-2">
+                <p>{message}</p>
+                {resetLink && (
+                  <div className="pt-2">
+                    <a
+                      href={resetLink}
+                      className="inline-flex items-center justify-center px-4 py-2 bg-brand text-white text-xs font-semibold rounded-lg hover:bg-brand-dark transition-colors shadow-sm"
+                    >
+                      Click here to Reset Password Now
+                    </a>
+                  </div>
+                )}
               </div>
             )}
             

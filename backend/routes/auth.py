@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
 
-from database.connection import get_db
+from database.connection import get_db, settings
 from schemas.domain import (
     UserCreate, UserResponse, Token, UserUpdate, 
     UsernameCheckRequest, SendEmailOTPRequest, VerifyEmailOTPRequest, 
@@ -255,13 +256,17 @@ def forgot_password_route(request: ForgotPasswordRequest, db: Session = Depends(
     db.add(record)
     db.commit()
     
-    # Assume frontend is at localhost:5173 for local dev, but should ideally use env var
-    import os
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    frontend_url = (settings.FRONTEND_URL or "https://terravyn.vercel.app").rstrip("/")
     reset_link = f"{frontend_url}/reset-password?email={user.email}&token={token}"
     
-    send_password_reset_email(user.email, reset_link, user.full_name)
-    return {"message": "If an account with that email exists, we sent a password reset link."}
+    email_sent = send_password_reset_email(user.email, reset_link, user.full_name)
+    if email_sent:
+        return {"message": "If an account with that email exists, we sent a password reset link."}
+    else:
+        return {
+            "message": "Password reset link generated. (Test/Dev mode active)",
+            "reset_link": reset_link
+        }
 
 @router.post("/reset-password")
 def reset_password_route(request: ResetPasswordRequest, db: Session = Depends(get_db)):

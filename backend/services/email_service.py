@@ -3,19 +3,70 @@ from email.message import EmailMessage
 import logging
 from database.connection import settings
 import os
-from fastapi import HTTPException
 
 logger = logging.getLogger("uvicorn.error")
 
+def _send_smtp_message(msg: EmailMessage, recipient_email: str) -> bool:
+    host = (settings.SMTP_HOST or "").strip()
+    username = (settings.SMTP_USERNAME or "").strip()
+    # Strip spaces that users commonly copy with Google App Passwords (e.g. "abcd efgh ijkl mnop")
+    password = (settings.SMTP_PASSWORD or "").replace(" ", "").strip()
+    
+    if not host or not username:
+        logger.warning(f"[SMTP UNCONFIGURED] Missing SMTP_HOST or SMTP_USERNAME. Cannot send email to {recipient_email}")
+        return False
+        
+    try:
+        configured_port = int(settings.SMTP_PORT) if settings.SMTP_PORT else 587
+    except (ValueError, TypeError):
+        configured_port = 587
+
+    # Strategies to try in order: (use_ssl, port)
+    if configured_port == 465:
+        strategies = [(True, 465), (False, 587)]
+    else:
+        strategies = [(False, configured_port), (True, 465)]
+
+    last_error = None
+    for use_ssl, try_port in strategies:
+        try:
+            logger.info(f"[SMTP ATTEMPT] Connecting to {host}:{try_port} (SSL={use_ssl}) for {recipient_email}...")
+            if use_ssl:
+                server = smtplib.SMTP_SSL(host, try_port, timeout=15)
+            else:
+                server = smtplib.SMTP(host, try_port, timeout=15)
+                server.ehlo()
+                if settings.SMTP_USE_TLS or try_port == 587:
+                    server.starttls()
+                    server.ehlo()
+            
+            with server:
+                server.login(username, password)
+                server.send_message(msg)
+            
+            logger.info(f"[SMTP SUCCESS] Email successfully delivered to {recipient_email} via {host}:{try_port}")
+            return True
+        except smtplib.SMTPAuthenticationError as auth_err:
+            logger.error(f"[SMTP AUTH FAILED] Authentication failed for user '{username}' on {host}:{try_port}. Error: {str(auth_err)}")
+            last_error = auth_err
+            # Break if authentication specifically fails (e.g. wrong app password)
+            break
+        except Exception as e:
+            logger.warning(f"[SMTP STRATEGY FAILED] Connection to {host}:{try_port} failed: {str(e)}")
+            last_error = e
+
+    logger.error(f"[SMTP DELIVERY FAILED] Could not send email to {recipient_email}. Last error: {str(last_error)}")
+    return False
+
 def send_invoice_email(customer_email: str, customer_name: str, order_id: str, invoice_number: str, payment_status: str, pdf_path: str):
-    if not settings.SMTP_HOST or not settings.SMTP_USERNAME:
-        logger.warning("SMTP not configured. Skipping email send.")
-        return
+    from_name = (settings.SMTP_FROM_NAME or "TERRAVYN").strip()
+    from_email = (settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME or "support@terravyn.com").strip()
 
     msg = EmailMessage()
     msg['Subject'] = "TERRAVYN Order Confirmation - Invoice Attached"
-    msg['From'] = settings.SMTP_FROM_EMAIL or "support@terravyn.com"
+    msg['From'] = f"{from_name} <{from_email}>"
     msg['To'] = customer_email
+    msg['Reply-To'] = from_email
 
     body = f"""Dear {customer_name},
 
@@ -42,24 +93,17 @@ The TERRAVYN Team
     else:
         logger.warning(f"PDF path {pdf_path} does not exist. Sending email without attachment.")
 
-    try:
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-            server.starttls()
-            server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-            server.send_message(msg)
-        logger.info(f"Invoice email successfully sent to {customer_email}")
-    except Exception as e:
-        logger.error(f"Failed to send email to {customer_email}: {str(e)}")
+    _send_smtp_message(msg, customer_email)
 
 def send_order_status_email(customer_email: str, customer_name: str, order_id: str, status: str, tracking_details: dict = None):
-    if not settings.SMTP_HOST or not settings.SMTP_USERNAME:
-        logger.warning("SMTP not configured. Skipping status email send.")
-        return
+    from_name = (settings.SMTP_FROM_NAME or "TERRAVYN").strip()
+    from_email = (settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME or "support@terravyn.com").strip()
 
     msg = EmailMessage()
     msg['Subject'] = f"TERRAVYN Order Update: {status}"
-    msg['From'] = settings.SMTP_FROM_EMAIL or "support@terravyn.com"
+    msg['From'] = f"{from_name} <{from_email}>"
     msg['To'] = customer_email
+    msg['Reply-To'] = from_email
 
     tracking_section = ""
     if tracking_details and tracking_details.get('courier_name'):
@@ -81,27 +125,17 @@ Best regards,
 The TERRAVYN Team
 """
     msg.set_content(body)
-
-    try:
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-            server.starttls()
-            server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-            server.send_message(msg)
-        logger.info(f"Status email ({status}) successfully sent to {customer_email}")
-    except Exception as e:
-        logger.error(f"Failed to send status email to {customer_email}: {str(e)}")
+    _send_smtp_message(msg, customer_email)
 
 def send_otp_email(recipient_email: str, otp: str, recipient_name: str) -> bool:
-    if not settings.SMTP_HOST or not settings.SMTP_USERNAME:
-        logger.warning(f"SMTP not configured. Fallback mode for {recipient_email}: OTP={otp}")
-        return False
-        
+    from_name = (settings.SMTP_FROM_NAME or "TERRAVYN").strip()
+    from_email = (settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME or "support@terravyn.com").strip()
+
     msg = EmailMessage()
     msg['Subject'] = "TERRAVYN Email Verification Code"
-    from_name = settings.SMTP_FROM_NAME or "TERRAVYN"
-    from_email = settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME or "support@terravyn.com"
     msg['From'] = f"{from_name} <{from_email}>"
     msg['To'] = recipient_email
+    msg['Reply-To'] = from_email
 
     plain_text = f"Hello {recipient_name},\n\nYour TERRAVYN verification code is: {otp}\n\nThis code expires in 10 minutes.\nIf you did not request this code, please ignore this email.\n\nBest regards,\nTERRAVYN Team"
     msg.set_content(plain_text)
@@ -124,71 +158,39 @@ def send_otp_email(recipient_email: str, otp: str, recipient_name: str) -> bool:
 </html>"""
 
     msg.add_alternative(html_body, subtype='html')
-
-    try:
-        if settings.SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-                server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-                server.send_message(msg)
-        else:
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-                if settings.SMTP_USE_TLS:
-                    server.starttls()
-                server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-                server.send_message(msg)
-        logger.info(f"OTP Email Sent successfully to {recipient_email}")
-        return True
-    except smtplib.SMTPAuthenticationError as e:
-        logger.error(f"SMTP Authentication Error: {str(e)}")
-        logger.info(f"MOCK EMAIL: OTP for {recipient_email} is {otp}")
-        return False
-    except Exception as e:
-        logger.error(f"SMTP Delivery Error for {recipient_email}: {str(e)}")
-        logger.info(f"MOCK EMAIL: OTP for {recipient_email} is {otp}")
-        return False
+    return _send_smtp_message(msg, recipient_email)
 
 def send_password_reset_email(recipient_email: str, reset_link: str, recipient_name: str) -> bool:
-    if not settings.SMTP_HOST or not settings.SMTP_USERNAME:
-        logger.warning(f"SMTP not configured. Mocking password reset for {recipient_email}: Link={reset_link}")
-        return False
-        
+    from_name = (settings.SMTP_FROM_NAME or "TERRAVYN").strip()
+    from_email = (settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME or "support@terravyn.com").strip()
+
     msg = EmailMessage()
     msg['Subject'] = "TERRAVYN Password Reset Request"
-    from_name = settings.SMTP_FROM_NAME or "TERRAVYN"
-    from_email = settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME or "support@terravyn.com"
     msg['From'] = f"{from_name} <{from_email}>"
     msg['To'] = recipient_email
+    msg['Reply-To'] = from_email
 
-    plain_text = f"You requested a password reset.\nClick the following link to reset your password: {reset_link}\nThis link expires in 1 hour."
+    plain_text = f"Hello {recipient_name},\n\nYou requested a password reset for your TERRAVYN account.\nClick the following link to reset your password: {reset_link}\nThis link expires in 1 hour.\n\nBest regards,\nTERRAVYN Team"
     msg.set_content(plain_text)
 
-    html_body = f"""Hello {recipient_name},<br><br>
-You recently requested to reset your password for your TERRAVYN account.<br><br>
-Please click the button below to reset it:<br><br>
-<a href="{reset_link}" style="display:inline-block;padding:10px 20px;background-color:#10b981;color:#ffffff;text-decoration:none;border-radius:5px;font-weight:bold;">Reset Password</a><br><br>
-If you did not request a password reset, please ignore this email or contact support if you have questions.<br><br>
-This link will expire in 1 hour.<br><br>
-Regards,<br>
-TERRAVYN Team"""
+    html_body = f"""<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 20px; color: #1e293b;">
+  <div style="max-width: 500px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; padding: 24px; border: 1px solid #e2e8f0;">
+    <h2 style="color: #10b981; margin-top: 0;">Reset Your Password</h2>
+    <p>Hello <strong>{recipient_name}</strong>,</p>
+    <p>You recently requested to reset your password for your TERRAVYN account. Click the button below to proceed:</p>
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="{reset_link}" style="display: inline-block; padding: 12px 28px; background-color: #10b981; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px;">Reset Password</a>
+    </div>
+    <p style="font-size: 13px; color: #64748b;">Or copy and paste this link into your browser:<br><a href="{reset_link}" style="color: #10b981; word-break: break-all;">{reset_link}</a></p>
+    <p style="font-size: 13px; color: #64748b;">This link will expire in 1 hour. If you did not request a password reset, you can safely ignore this email.</p>
+    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+    <p style="font-size: 12px; color: #94a3b8; margin-bottom: 0;">Regards,<br><strong>TERRAVYN Smart Agriculture</strong></p>
+  </div>
+</body>
+</html>"""
 
     msg.add_alternative(html_body, subtype='html')
+    return _send_smtp_message(msg, recipient_email)
 
-    try:
-        if settings.SMTP_PORT == 465:
-            with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-                server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-                server.send_message(msg)
-        else:
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
-                if settings.SMTP_USE_TLS:
-                    server.starttls()
-                server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-                server.send_message(msg)
-        logger.info(f"Password Reset Email Sent successfully to {recipient_email}")
-        return True
-    except smtplib.SMTPAuthenticationError as e:
-        logger.error(f"SMTP Authentication Errors: {str(e)}")
-        return False
-    except Exception as e:
-        logger.error(f"SMTP Connection Errors: {str(e)}")
-        return False

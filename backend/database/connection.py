@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     SMTP_FROM_NAME: str = "TERRAVYN"
     SMTP_USE_TLS: bool = True
     
+    FRONTEND_URL: str = "https://terravyn.vercel.app"
+    
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_PHONE_NUMBER: str = ""
