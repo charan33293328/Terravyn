@@ -48,8 +48,15 @@ def send_email_otp_route(request: SendEmailOTPRequest, db: Session = Depends(get
     db.add(record)
     db.commit()
     
-    send_otp_email(request.email, otp, request.full_name)
-    return {"message": "OTP sent successfully"}
+    email_sent = send_otp_email(request.email, otp, request.full_name)
+    if email_sent:
+        return {"message": "Verification OTP sent to your email successfully.", "email_sent": True}
+    else:
+        return {
+            "message": f"Verification code generated (Test/Dev mode OTP: {otp})",
+            "email_sent": False,
+            "dev_otp": otp
+        }
 
 @router.post("/verify-email-otp")
 def verify_email_otp_route(request: VerifyEmailOTPRequest, db: Session = Depends(get_db)):
@@ -101,8 +108,15 @@ def send_phone_otp_route(request: SendPhoneOTPRequest, db: Session = Depends(get
     db.add(record)
     db.commit()
     
-    send_phone_otp(request.phone_number, otp)
-    return {"message": "OTP sent successfully"}
+    sms_sent = send_phone_otp(request.phone_number, otp)
+    if sms_sent and settings.TWILIO_ACCOUNT_SID:
+        return {"message": "Verification code sent to your mobile phone.", "sms_sent": True}
+    else:
+        return {
+            "message": f"Verification code generated (Test/Dev mode OTP: {otp})",
+            "sms_sent": False,
+            "dev_otp": otp
+        }
 
 @router.post("/verify-phone-otp")
 def verify_phone_otp_route(request: VerifyPhoneOTPRequest, db: Session = Depends(get_db)):

@@ -231,7 +231,7 @@ const Signup = () => {
     }
     setLoading(true);
     try {
-      await api.post('/auth/send-email-otp', {
+      const res = await api.post('/auth/send-email-otp', {
         email: formData.email.trim(),
         full_name: formData.full_name.trim(),
         username: formData.username.trim()
@@ -242,8 +242,13 @@ const Signup = () => {
         emailResends: prev.emailOtpSent ? prev.emailResends + 1 : prev.emailResends
       }));
       setTimers(prev => ({ ...prev, email: 60 }));
-      setSuccess('Verification OTP sent to your email.');
-      setTimeout(() => setSuccess(''), 4000);
+      if (res.data?.dev_otp) {
+        setOtps(prev => ({ ...prev, email: res.data.dev_otp }));
+        setSuccess(`Verification code generated: ${res.data.dev_otp}`);
+      } else {
+        setSuccess('Verification OTP sent to your email.');
+      }
+      setTimeout(() => setSuccess(''), 5000);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to send Email OTP.');
     } finally {
@@ -294,7 +299,7 @@ const Signup = () => {
     setLoading(true);
     try {
       const formattedPhone = `+91${formData.phone_number.trim()}`;
-      await api.post('/auth/send-phone-otp', {
+      const res = await api.post('/auth/send-phone-otp', {
         phone_number: formattedPhone
       });
       setStatus(prev => ({ 
@@ -303,8 +308,13 @@ const Signup = () => {
         phoneResends: prev.phoneOtpSent ? prev.phoneResends + 1 : prev.phoneResends
       }));
       setTimers(prev => ({ ...prev, phone: 60 }));
-      setSuccess('SMS OTP sent successfully.');
-      setTimeout(() => setSuccess(''), 4000);
+      if (res.data?.dev_otp) {
+        setOtps(prev => ({ ...prev, phone: res.data.dev_otp }));
+        setSuccess(`Verification code generated: ${res.data.dev_otp}`);
+      } else {
+        setSuccess('SMS OTP sent successfully.');
+      }
+      setTimeout(() => setSuccess(''), 5000);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to send SMS OTP.');
     } finally {
