@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Leaf, Droplets, Activity, Shield, ArrowRight, ChevronDown, Package, Wifi, User, QrCode, LayoutDashboard, Plus, Minus } from 'lucide-react';
+import { Leaf, Droplets, Activity, Shield, ArrowRight, ChevronDown, Package, Wifi, User, QrCode, LayoutDashboard, Plus, Minus, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import OnboardingVideo from '../components/OnboardingVideo';
@@ -53,6 +53,7 @@ const Landing = () => {
   const [faqs, setFaqs] = useState([]);
   const [settings, setSettings] = useState(null);
   const [loadingCms, setLoadingCms] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -120,15 +121,17 @@ const Landing = () => {
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900">
       {/* Navbar */}
-      <nav className="fixed w-full bg-white/80 backdrop-blur-md z-50 border-b border-slate-100">
+      <nav className="fixed w-full bg-white/90 backdrop-blur-md z-50 border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
-            <div className="flex items-center gap-2">
+            <Link to="/" className="flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
               <div className="w-10 h-10 bg-brand rounded-xl flex items-center justify-center shadow-lg shadow-brand/20">
                 <Leaf className="w-6 h-6 text-white" />
               </div>
               <span className="font-bold text-xl tracking-tight text-slate-800">{platformName}</span>
-            </div>
+            </Link>
+            
+            {/* Desktop Links */}
             <div className="hidden md:flex items-center gap-8">
               <a href="#home" className="text-sm font-medium text-slate-600 hover:text-brand transition-colors">{t('nav.home')}</a>
               <a href="#features" className="text-sm font-medium text-slate-600 hover:text-brand transition-colors">{t('nav.features')}</a>
@@ -136,19 +139,104 @@ const Landing = () => {
               <Link to="/pricing" className="text-sm font-medium text-slate-600 hover:text-brand transition-colors">{t('nav.pricing')}</Link>
               {faqs.length > 0 && <a href="#faqs" className="text-sm font-medium text-slate-600 hover:text-brand transition-colors">FAQs</a>}
             </div>
-            <div className="flex items-center gap-4">
+
+            {/* Desktop & Mobile Actions */}
+            <div className="flex items-center gap-3">
               <LanguageSelector />
-              <Link to="/login" className="text-sm font-medium text-slate-700 hover:text-brand transition-colors">{t('nav.login')}</Link>
-              <Link to="/signup" className="px-5 py-2.5 bg-brand text-white text-sm font-medium rounded-lg shadow-md shadow-brand/20 hover:bg-brand-dark transition-all hover:-translate-y-0.5">
-                {t('nav.getStarted')}
-              </Link>
+              
+              <div className="hidden sm:flex items-center gap-3">
+                <Link to="/login" className="text-sm font-medium text-slate-700 hover:text-brand transition-colors px-2 py-1">{t('nav.login')}</Link>
+                <Link to="/signup" className="px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg shadow-md shadow-brand/20 hover:bg-brand-dark transition-all hover:-translate-y-0.5 whitespace-nowrap">
+                  {t('nav.getStarted')}
+                </Link>
+              </div>
+
+              {/* Hamburger Button */}
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="md:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                aria-label="Toggle navigation menu"
+              >
+                {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+              </button>
             </div>
           </div>
         </div>
+
+        {/* Mobile Navigation Drawer */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="md:hidden bg-white border-b border-slate-200 overflow-hidden shadow-xl"
+            >
+              <div className="px-4 py-6 space-y-4">
+                <div className="flex flex-col space-y-3">
+                  <a
+                    href="#home"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-3 py-2 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand rounded-lg transition-colors"
+                  >
+                    {t('nav.home')}
+                  </a>
+                  <a
+                    href="#features"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-3 py-2 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand rounded-lg transition-colors"
+                  >
+                    {t('nav.features')}
+                  </a>
+                  <a
+                    href="#how-it-works"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-3 py-2 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand rounded-lg transition-colors"
+                  >
+                    {t('nav.howItWorks')}
+                  </a>
+                  <Link
+                    to="/pricing"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-3 py-2 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand rounded-lg transition-colors"
+                  >
+                    {t('nav.pricing')}
+                  </Link>
+                  {faqs.length > 0 && (
+                    <a
+                      href="#faqs"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="px-3 py-2 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand rounded-lg transition-colors"
+                    >
+                      FAQs
+                    </a>
+                  )}
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex flex-col gap-3">
+                  <Link
+                    to="/login"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="w-full text-center py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors"
+                  >
+                    {t('nav.login')}
+                  </Link>
+                  <Link
+                    to="/signup"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="w-full text-center py-3 bg-brand text-white text-sm font-bold rounded-xl shadow-md shadow-brand/20 hover:bg-brand-dark transition-colors"
+                  >
+                    {t('nav.getStarted')}
+                  </Link>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
 
       {/* Hero Section */}
-      <section id="home" className="relative w-full h-[80vh] lg:h-screen flex items-center justify-center overflow-hidden bg-slate-900">
+      <section id="home" className="relative w-full min-h-[85vh] lg:min-h-screen flex items-center justify-center overflow-hidden bg-slate-900 py-24 sm:py-0">
         <div className="absolute inset-0 bg-[url('/hero-poster.jpg')] bg-cover bg-center bg-no-repeat" aria-hidden="true"></div>
 
         {!prefersReducedMotion && (
@@ -173,17 +261,17 @@ const Landing = () => {
 
         <div className="absolute inset-0 bg-[rgba(0,0,0,0.45)] pointer-events-none z-0"></div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center flex flex-col items-center justify-center h-full w-full pt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center flex flex-col items-center justify-center h-full w-full pt-20 sm:pt-24">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-            className="space-y-6"
+            className="space-y-4 sm:space-y-6"
           >
-            <h1 className="text-6xl md:text-8xl font-extrabold tracking-tight text-white drop-shadow-lg">
+            <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-extrabold tracking-tight text-white drop-shadow-lg leading-tight">
               {heroTitle}
             </h1>
-            <h2 className="text-xl md:text-3xl font-medium tracking-wide text-brand-light text-green-300 drop-shadow-md max-w-4xl mx-auto whitespace-pre-line">
+            <h2 className="text-lg sm:text-2xl md:text-3xl font-medium tracking-wide text-green-300 drop-shadow-md max-w-4xl mx-auto whitespace-pre-line px-2">
               {heroSubtitle}
             </h2>
           </motion.div>
@@ -192,7 +280,7 @@ const Landing = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1.2, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-8 max-w-2xl mx-auto text-lg md:text-2xl font-light text-slate-300 leading-relaxed drop-shadow-sm"
+            className="mt-6 sm:mt-8 max-w-2xl mx-auto text-base sm:text-xl md:text-2xl font-light text-slate-300 leading-relaxed drop-shadow-sm px-4"
           >
             {heroDesc}
           </motion.p>
@@ -201,17 +289,18 @@ const Landing = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 1.2, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-12 flex flex-col sm:flex-row justify-center items-center gap-6"
+            className="mt-8 sm:mt-12 flex flex-col sm:flex-row justify-center items-center gap-4 sm:gap-6 w-full max-w-md sm:max-w-none px-4"
           >
-            <Link to={ctaUrl} className="px-8 py-4 bg-brand/90 hover:bg-brand text-white text-lg font-medium rounded-full backdrop-blur-md shadow-[0_8px_32px_rgba(10,125,64,0.4)] border border-brand-light/20 transition-all hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(10,125,64,0.6)] flex items-center justify-center gap-2 group">
+            <Link to={ctaUrl} className="w-full sm:w-auto px-8 py-4 bg-brand/90 hover:bg-brand text-white text-base sm:text-lg font-medium rounded-full backdrop-blur-md shadow-[0_8px_32px_rgba(10,125,64,0.4)] border border-brand-light/20 transition-all hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(10,125,64,0.6)] flex items-center justify-center gap-2 group">
               {ctaText} 
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Link>
-            <a href="#features" className="px-8 py-4 bg-white/5 hover:bg-white/10 text-white text-lg font-medium rounded-full backdrop-blur-xl border border-white/10 transition-all hover:-translate-y-1 shadow-[0_8px_32px_rgba(0,0,0,0.2)] hover:border-white/20 flex items-center justify-center">
+            <a href="#features" className="w-full sm:w-auto px-8 py-4 bg-white/5 hover:bg-white/10 text-white text-base sm:text-lg font-medium rounded-full backdrop-blur-xl border border-white/10 transition-all hover:-translate-y-1 shadow-[0_8px_32px_rgba(0,0,0,0.2)] hover:border-white/20 flex items-center justify-center">
               {t('hero.exploreDashboard')}
             </a>
           </motion.div>
         </div>
+
 
         <motion.div 
           initial={{ opacity: 0 }}

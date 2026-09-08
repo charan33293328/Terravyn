@@ -164,9 +164,9 @@ const MonitoringCenter = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap gap-4">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4">
         <select
-          className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-brand focus:ring-1 focus:ring-brand min-w-[200px]"
+          className="w-full sm:w-auto flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-brand focus:ring-1 focus:ring-brand min-w-[150px]"
           value={selectedFarm}
           onChange={(e) => {
             setSelectedFarm(e.target.value);
@@ -179,7 +179,7 @@ const MonitoringCenter = () => {
         </select>
 
         <select
-          className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-brand focus:ring-1 focus:ring-brand min-w-[200px]"
+          className="w-full sm:w-auto flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-brand focus:ring-1 focus:ring-brand min-w-[150px]"
           value={selectedDevice}
           onChange={(e) => {
             setSelectedDevice(e.target.value);
@@ -191,7 +191,7 @@ const MonitoringCenter = () => {
         </select>
 
         <select
-          className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-brand focus:ring-1 focus:ring-brand min-w-[200px]"
+          className="w-full sm:w-auto flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 outline-none focus:border-brand focus:ring-1 focus:ring-brand min-w-[150px]"
           value={timeRange}
           onChange={(e) => {
             setTimeRange(e.target.value);

@@ -130,7 +130,7 @@ export default function SupportCenter() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex items-center space-x-4">
           <div className="p-3 bg-blue-50 rounded-lg text-blue-600">
             <LifeBuoy className="w-6 h-6" />

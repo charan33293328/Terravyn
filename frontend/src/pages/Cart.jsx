@@ -147,7 +147,7 @@ const Cart = () => {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 animate-fade-in">
       {/* Navbar */}
-      <nav className="fixed w-full bg-white/80 backdrop-blur-md z-50 border-b border-slate-100">
+      <nav className="fixed w-full bg-white/90 backdrop-blur-md z-50 border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <Link to="/" className="flex items-center gap-2">
@@ -156,80 +156,81 @@ const Cart = () => {
               </div>
               <span className="font-bold text-xl tracking-tight text-slate-800">TERRAVYN</span>
             </Link>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <LanguageSelector />
-              <Link to="/pricing" className="text-sm font-bold text-slate-600 hover:text-brand transition-colors">Continue Shopping</Link>
+              <Link to="/pricing" className="text-xs sm:text-sm font-bold text-slate-600 hover:text-brand transition-colors whitespace-nowrap">Continue Shopping</Link>
             </div>
           </div>
         </div>
       </nav>
 
-      <main className="pt-32 pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3 mb-8">
+      <main className="pt-28 sm:pt-32 pb-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-3 mb-6 sm:mb-8">
           <button onClick={() => navigate(-1)} className="p-2 text-slate-500 hover:text-brand hover:bg-brand/10 rounded-xl transition-colors">
-            <ArrowLeft size={24} />
+            <ArrowLeft size={20} className="sm:w-6 sm:h-6" />
           </button>
-          <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
-            <ShoppingCart className="text-brand w-8 h-8" />
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-800 flex items-center gap-2 sm:gap-3">
+            <ShoppingCart className="text-brand w-6 h-6 sm:w-8 sm:h-8" />
             Your Shopping Cart
           </h1>
         </div>
 
         {cartItems.length === 0 ? (
-          <div className="bg-white rounded-3xl p-12 text-center shadow-sm border border-slate-100 flex flex-col items-center">
-            <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
-              <ShoppingCart className="w-12 h-12 text-slate-300" />
+          <div className="bg-white rounded-3xl p-8 sm:p-12 text-center shadow-sm border border-slate-100 flex flex-col items-center">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
+              <ShoppingCart className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300" />
             </div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">Your cart is empty</h2>
-            <p className="text-slate-500 mb-8 max-w-md mx-auto">Looks like you haven't added any TERRAVYN products to your cart yet.</p>
-            <Link to="/pricing" className="bg-brand text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-brand/20 hover:bg-brand-dark transition-colors inline-flex items-center gap-2">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-800 mb-2">Your cart is empty</h2>
+            <p className="text-slate-500 mb-8 max-w-md mx-auto text-sm sm:text-base">Looks like you haven't added any TERRAVYN products to your cart yet.</p>
+            <Link to="/pricing" className="bg-brand text-white px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl font-bold shadow-lg shadow-brand/20 hover:bg-brand-dark transition-colors inline-flex items-center gap-2 text-sm sm:text-base">
               Browse Products
             </Link>
           </div>
         ) : (
-          <div className="grid lg:grid-cols-3 gap-8">
+          <div className="grid lg:grid-cols-3 gap-6 sm:gap-8">
             <div className="lg:col-span-2 space-y-4">
               {cartItems.map((item) => (
-                <div key={item.product_id} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col sm:flex-row items-center gap-6 relative group">
+                <div key={item.product_id} className="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-100 flex flex-col sm:flex-row items-center gap-4 sm:gap-6 relative group">
                   <button 
                     onClick={() => removeFromCart(item.product_id)}
-                    className="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Remove item"
                   >
-                    <Trash2 size={20} />
+                    <Trash2 size={18} />
                   </button>
                   
-                  <div className="w-32 h-32 bg-slate-50 rounded-xl flex-shrink-0 border border-slate-100 overflow-hidden">
+                  <div className="w-24 h-24 sm:w-32 sm:h-32 bg-slate-50 rounded-xl flex-shrink-0 border border-slate-100 overflow-hidden">
                     {item.image ? (
                       <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center"><Leaf className="text-slate-200 w-12 h-12" /></div>
+                      <div className="w-full h-full flex items-center justify-center"><Leaf className="text-slate-200 w-10 h-10 sm:w-12 sm:h-12" /></div>
                     )}
                   </div>
                   
-                  <div className="flex-1 text-center sm:text-left">
-                    <h3 className="font-bold text-lg text-slate-800 mb-1 pr-8">{item.name}</h3>
-                    <p className="text-brand font-black text-xl mb-4">₹{item.price.toLocaleString()}</p>
+                  <div className="flex-1 text-center sm:text-left w-full">
+                    <h3 className="font-bold text-base sm:text-lg text-slate-800 mb-1 pr-6 sm:pr-8">{item.name}</h3>
+                    <p className="text-brand font-black text-lg sm:text-xl mb-3 sm:mb-4">₹{item.price.toLocaleString()}</p>
                     
-                    <div className="flex items-center justify-center sm:justify-start gap-4">
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 sm:gap-4">
                       <div className="flex items-center border border-slate-200 rounded-lg bg-white overflow-hidden shadow-sm">
                         <button 
                           onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
-                          className="px-3 py-2 text-slate-500 hover:bg-slate-50 hover:text-brand transition-colors"
+                          className="px-2.5 sm:px-3 py-1.5 sm:py-2 text-slate-500 hover:bg-slate-50 hover:text-brand transition-colors"
                         >
-                          <Minus size={16} />
+                          <Minus size={14} className="sm:w-4 sm:h-4" />
                         </button>
-                        <div className="w-12 text-center font-bold text-slate-800 border-x border-slate-200 py-2 text-sm">
+                        <div className="w-10 sm:w-12 text-center font-bold text-slate-800 border-x border-slate-200 py-1.5 sm:py-2 text-xs sm:text-sm">
                           {item.quantity}
                         </div>
                         <button 
                           onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
-                          className="px-3 py-2 text-slate-500 hover:bg-slate-50 hover:text-brand transition-colors"
+                          className="px-2.5 sm:px-3 py-1.5 sm:py-2 text-slate-500 hover:bg-slate-50 hover:text-brand transition-colors"
                         >
-                          <Plus size={16} />
+                          <Plus size={14} className="sm:w-4 sm:h-4" />
                         </button>
                       </div>
                       
-                      <div className="text-sm font-bold text-slate-500">
+                      <div className="text-xs sm:text-sm font-bold text-slate-500">
                         Subtotal: <span className="text-slate-800">₹{(item.price * item.quantity).toLocaleString()}</span>
                       </div>
                     </div>
@@ -237,16 +238,17 @@ const Cart = () => {
                 </div>
               ))}
               
-              <div className="flex justify-between items-center px-2 py-4">
-                <button onClick={clearCart} className="text-sm font-bold text-slate-500 hover:text-red-500 flex items-center gap-2">
+              <div className="flex justify-between items-center px-2 py-3">
+                <button onClick={clearCart} className="text-xs sm:text-sm font-bold text-slate-500 hover:text-red-500 flex items-center gap-1.5 transition-colors">
                   <Trash2 size={16} /> Clear Cart
                 </button>
               </div>
             </div>
             
             <div>
-              <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-100 sticky top-32">
-                <h3 className="text-xl font-bold text-slate-800 mb-6 pb-4 border-b border-slate-100">Order Summary</h3>
+              <div className="bg-white rounded-2xl sm:rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-100 lg:sticky lg:top-32">
+                <h3 className="text-lg sm:text-xl font-bold text-slate-800 mb-6 pb-4 border-b border-slate-100">Order Summary</h3>
+
                 
                 <div className="space-y-4 mb-6">
                   <div className="flex justify-between text-slate-600">

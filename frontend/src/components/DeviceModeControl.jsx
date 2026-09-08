@@ -109,7 +109,7 @@ const DeviceModeControl = ({ device, onModeChange, compact = false }) => {
   }
 
   return (
-    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/50 p-4 min-w-[250px]">
+    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/50 p-4 w-full sm:w-auto min-w-[220px]">
       {content}
     </div>
   );

@@ -1,43 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
-import { Leaf, CheckCircle2, ChevronRight, ArrowLeft, ShoppingCart, Plus, Minus } from 'lucide-react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { Leaf, ShoppingCart, ArrowLeft, ChevronRight, CheckCircle2, Plus, Minus, Menu, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useCart } from '../context/CartContext';
 import axios from 'axios';
-import LanguageSelector from '../components/LanguageSelector';
 import CustomerDetailsModal from '../components/CustomerDetailsModal';
 import PaymentSelectionModal from '../components/PaymentSelectionModal';
 import SuccessModal from '../components/SuccessModal';
+import LanguageSelector from '../components/LanguageSelector';
+import { useCart } from '../context/CartContext';
 import { fetchPublicSettings } from '../api/publicCms';
 
 const ProductDetails = () => {
   const { slug } = useParams();
-  const { t } = useTranslation();
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const { addToCart, getCartCount } = useCart();
   
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [settings, setSettings] = useState(null);
-  
+  const [quantity, setQuantity] = useState(1);
   const [mainImage, setMainImage] = useState('');
+  const [settings, setSettings] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Modals state
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [customerData, setCustomerData] = useState(null);
-  const [toastMessage, setToastMessage] = useState('');
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [customerData, setCustomerData] = useState(null);
   const [completedOrderData, setCompletedOrderData] = useState(null);
-  
-  const [quantity, setQuantity] = useState(1);
-  const { addToCart, getCartCount } = useCart();
-
-  const handleAddToCart = () => {
-    addToCart(product, quantity);
-    setToastMessage(`${quantity} item(s) added to cart`);
-    setTimeout(() => setToastMessage(''), 3000);
-  };
+  const [toastMessage, setToastMessage] = useState('');
 
   const incrementQuantity = () => {
-    // Arbitrary max 10, or could be bounded by stock later
     if (quantity < 10) setQuantity(prev => prev + 1);
   };
 
@@ -121,7 +116,7 @@ const ProductDetails = () => {
         
         const options = {
           key: razorpayKey,
-          amount: orderData.total_amount * 100, // paise
+          amount: orderData.total_amount * 100,
           currency: 'INR',
           name: platformName,
           description: product.name,
@@ -185,6 +180,12 @@ const ProductDetails = () => {
     }
   };
 
+  const handleAddToCart = () => {
+    addToCart(product, quantity);
+    setToastMessage(`Added ${quantity} x ${product.name} to cart!`);
+    setTimeout(() => setToastMessage(''), 3000);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -195,8 +196,8 @@ const ProductDetails = () => {
 
   if (!product) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
-        <h2 className="text-2xl font-bold mb-4">Product Not Found</h2>
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <h2 className="text-2xl font-bold text-slate-800 mb-4">Product Not Found</h2>
         <Link to="/pricing" className="text-brand font-bold hover:underline">Return to Products</Link>
       </div>
     );
@@ -205,42 +206,92 @@ const ProductDetails = () => {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 animate-fade-in">
       {/* Navbar */}
-      <nav className="fixed w-full bg-white/80 backdrop-blur-md z-50 border-b border-slate-100">
+      <nav className="fixed w-full bg-white/90 backdrop-blur-md z-50 border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
-            <Link to="/" className="flex items-center gap-2">
+            <Link to="/" className="flex items-center gap-2" onClick={() => setMobileMenuOpen(false)}>
               <div className="w-10 h-10 bg-brand rounded-xl flex items-center justify-center shadow-lg shadow-brand/20">
                 <Leaf className="w-6 h-6 text-white" />
               </div>
               <span className="font-bold text-xl tracking-tight text-slate-800">{platformName}</span>
             </Link>
+            
             <div className="hidden md:flex items-center gap-8">
-              <Link to="/pricing" className="text-sm font-bold text-slate-600 hover:text-brand transition-colors"><ArrowLeft size={16} className="inline mr-1"/> Back to Products</Link>
+              <Link to="/pricing" className="text-sm font-bold text-slate-600 hover:text-brand transition-colors flex items-center gap-1">
+                <ArrowLeft size={16} /> Back to Products
+              </Link>
             </div>
-            <div className="flex items-center gap-4">
+            
+            <div className="flex items-center gap-3">
               <LanguageSelector />
-              <Link to="/login" className="text-sm font-medium text-slate-700 hover:text-brand transition-colors">{t('nav.login')}</Link>
-              <Link to="/cart" className="relative cursor-pointer hover:opacity-80 transition-opacity">
+              <Link to="/login" className="hidden sm:inline-block text-sm font-medium text-slate-700 hover:text-brand transition-colors px-2 py-1">{t('nav.login')}</Link>
+              
+              <Link to="/cart" className="relative cursor-pointer p-2 hover:bg-slate-100 rounded-lg transition-colors">
                 <ShoppingCart className="w-6 h-6 text-slate-700" />
                 {getCartCount() > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-brand text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                  <span className="absolute top-0.5 right-0.5 bg-brand text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
                     {getCartCount()}
                   </span>
                 )}
               </Link>
+
+              {/* Mobile Menu Button */}
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="md:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                aria-label="Toggle menu"
+              >
+                {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+              </button>
             </div>
           </div>
         </div>
+
+        {/* Mobile Dropdown */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="md:hidden bg-white border-b border-slate-200 overflow-hidden shadow-xl"
+            >
+              <div className="px-4 py-4 space-y-3">
+                <Link
+                  to="/pricing"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand rounded-lg transition-colors"
+                >
+                  <ArrowLeft size={18} /> Back to Products
+                </Link>
+                <Link
+                  to="/#home"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-3 py-2 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand rounded-lg transition-colors"
+                >
+                  {t('nav.home')}
+                </Link>
+                <Link
+                  to="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-3 py-2 text-base font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand rounded-lg transition-colors"
+                >
+                  {t('nav.login')}
+                </Link>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
 
-      <main className="pt-32 pb-24">
+      <main className="pt-28 sm:pt-32 pb-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-12 lg:gap-20">
+          <div className="grid lg:grid-cols-2 gap-8 lg:gap-16">
             
             {/* Left Column (Images) */}
             <div className="order-1">
               <div className="lg:sticky lg:top-32">
-                <div className="w-full aspect-[4/3] rounded-[32px] overflow-hidden bg-white shadow-xl border-4 border-white relative mb-6">
+                <div className="w-full aspect-[4/3] rounded-2xl sm:rounded-[32px] overflow-hidden bg-white shadow-xl border-4 border-white relative mb-4 sm:mb-6">
                   {mainImage ? (
                     <img src={mainImage} className="w-full h-full object-cover" alt={product.name} />
                   ) : (
@@ -251,12 +302,12 @@ const ProductDetails = () => {
                 </div>
 
                 {product.images && product.images.length > 0 && (
-                  <div className="flex gap-4 overflow-x-auto pb-4">
+                  <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-3 touch-pan-x">
                     {product.images.map((img, index) => (
                       <button 
                         key={index}
                         onClick={() => setMainImage(img.image_url)}
-                        className={`flex-shrink-0 w-24 h-24 rounded-2xl overflow-hidden bg-white border-4 transition-all duration-300 ${mainImage === img.image_url ? 'border-brand shadow-lg scale-105' : 'border-transparent hover:border-brand/30 hover:scale-105'}`}
+                        className={`flex-shrink-0 w-20 h-20 sm:w-24 sm:h-24 rounded-xl sm:rounded-2xl overflow-hidden bg-white border-2 sm:border-4 transition-all duration-300 ${mainImage === img.image_url ? 'border-brand shadow-lg scale-105' : 'border-transparent hover:border-brand/30 hover:scale-105'}`}
                       >
                         <img src={img.image_url} className="w-full h-full object-cover" alt="Thumbnail" />
                       </button>
@@ -267,57 +318,57 @@ const ProductDetails = () => {
             </div>
             
             {/* Right Column (Details) */}
-            <div className="order-2 flex flex-col space-y-8">
+            <div className="order-2 flex flex-col space-y-6 sm:space-y-8">
               <div>
                 <div className="flex items-center gap-3 mb-3">
-                  <span className="text-sm font-bold text-brand bg-brand/10 px-3 py-1 rounded-full uppercase tracking-wider">{product.category || 'System'}</span>
+                  <span className="text-xs sm:text-sm font-bold text-brand bg-brand/10 px-3 py-1 rounded-full uppercase tracking-wider">{product.category || 'System'}</span>
                   <span className="text-xs text-slate-400 font-mono">SKU: {product.sku}</span>
                 </div>
-                <h1 className="text-4xl lg:text-5xl font-extrabold text-slate-900 tracking-tight mb-4">
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-900 tracking-tight mb-3 sm:mb-4">
                   {product.name}
                 </h1>
                 {product.tagline && (
-                  <p className="text-xl text-brand font-medium tracking-wide mb-6">
+                  <p className="text-lg sm:text-xl text-brand font-medium tracking-wide mb-4 sm:mb-6">
                     {product.tagline}
                   </p>
                 )}
-                <p className="text-lg text-slate-600 leading-relaxed whitespace-pre-line">
+                <p className="text-base sm:text-lg text-slate-600 leading-relaxed whitespace-pre-line">
                   {product.full_description || product.short_description}
                 </p>
               </div>
 
               {/* Pricing & Checkout Card */}
-              <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-100 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-brand/5 rounded-bl-full -mr-8 -mt-8"></div>
+              <div className="bg-white rounded-2xl sm:rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-100 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-brand/5 rounded-bl-full -mr-8 -mt-8 pointer-events-none"></div>
                 
-                <div className="flex justify-between items-end mb-8 relative z-10">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-6 sm:mb-8 relative z-10">
                   <div>
-                    <p className="text-sm text-slate-500 font-medium uppercase tracking-wider mb-2">Total Price</p>
+                    <p className="text-xs sm:text-sm text-slate-500 font-medium uppercase tracking-wider mb-1 sm:mb-2">Total Price</p>
                     <div className="flex items-baseline gap-3">
-                      <span className="text-5xl font-extrabold text-slate-900">₹{product.current_price.toLocaleString()}</span>
+                      <span className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-900">₹{product.current_price.toLocaleString()}</span>
                       {product.discount_percentage > 0 && (
                         <div className="flex flex-col">
-                          <span className="text-sm text-slate-400 line-through">₹{product.mrp.toLocaleString()}</span>
+                          <span className="text-xs sm:text-sm text-slate-400 line-through">₹{product.mrp.toLocaleString()}</span>
                           <span className="text-xs font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded mt-0.5">
                             {product.discount_percentage}% OFF
                           </span>
                         </div>
                       )}
                     </div>
-                    {product.tax_percentage > 0 && <p className="text-sm text-slate-500 mt-2 font-medium">+{product.tax_percentage}% GST will be added at checkout</p>}
+                    {product.tax_percentage > 0 && <p className="text-xs sm:text-sm text-slate-500 mt-2 font-medium">+{product.tax_percentage}% GST will be added at checkout</p>}
                   </div>
-                  <div className="flex flex-col items-end gap-2">
+                  <div className="flex items-center sm:items-end">
                     {product.stock_status === 'IN_STOCK' ? (
-                      <div className="flex items-center gap-2 bg-green-50 text-brand px-4 py-2 rounded-full border border-green-200">
-                        <span className="relative flex h-3 w-3">
+                      <div className="flex items-center gap-2 bg-green-50 text-brand px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-green-200">
+                        <span className="relative flex h-2.5 w-2.5 sm:h-3 sm:w-3">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-3 w-3 bg-brand"></span>
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 sm:h-3 sm:w-3 bg-brand"></span>
                         </span>
-                        <span className="font-bold text-sm tracking-wide">In Stock</span>
+                        <span className="font-bold text-xs sm:text-sm tracking-wide">In Stock</span>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 bg-red-50 text-red-600 px-4 py-2 rounded-full border border-red-200">
-                        <span className="font-bold text-sm tracking-wide">Out of Stock</span>
+                      <div className="flex items-center gap-2 bg-red-50 text-red-600 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-red-200">
+                        <span className="font-bold text-xs sm:text-sm tracking-wide">Out of Stock</span>
                       </div>
                     )}
                   </div>
