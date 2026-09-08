@@ -248,3 +248,61 @@ async def check_offline_devices():
 @app.get("/")
 def read_root():
     return {"message": "TERRAVYN API is running - Production Architecture"}
+
+import socket
+import urllib.request
+
+@app.get("/api/health/network-diagnostics")
+def network_diagnostics():
+    """Diagnostic check for outbound DNS, general HTTPS, and SMTP ports."""
+    results = {}
+    
+    # 1. DNS check for smtp.gmail.com
+    try:
+        ips = socket.gethostbyname_ex("smtp.gmail.com")
+        results["dns_resolution"] = {
+            "status": "PASS",
+            "host": "smtp.gmail.com",
+            "resolved_ips_count": len(ips[2])
+        }
+    except Exception as e:
+        results["dns_resolution"] = {
+            "status": "FAIL",
+            "host": "smtp.gmail.com",
+            "error": str(e)
+        }
+
+    # 2. General Outbound HTTPS Internet Connectivity
+    try:
+        req = urllib.request.Request("https://www.google.com", headers={"User-Agent": "TERRAVYN/1.0"})
+        with urllib.request.urlopen(req, timeout=5) as res:
+            results["general_https_outbound"] = {
+                "status": "PASS" if res.status == 200 else "FAIL",
+                "http_status": res.status
+            }
+    except Exception as e:
+        results["general_https_outbound"] = {"status": "FAIL", "error": str(e)}
+
+    # 3. Test TCP 587, 465, 2525
+    for port in [587, 465, 2525]:
+        port_key = f"smtp_tcp_{port}"
+        try:
+            sock = socket.create_connection(("smtp.gmail.com", port), timeout=4)
+            sock.close()
+            results[port_key] = {"status": "PASS", "port": port}
+        except OSError as e:
+            results[port_key] = {
+                "status": "FAIL",
+                "port": port,
+                "error_type": type(e).__name__,
+                "error": str(e)
+            }
+        except Exception as e:
+            results[port_key] = {
+                "status": "FAIL",
+                "port": port,
+                "error_type": type(e).__name__,
+                "error": str(e)
+            }
+
+    return results
