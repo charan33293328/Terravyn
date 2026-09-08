@@ -19,62 +19,135 @@ from datetime import datetime, timedelta
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 import socket
+import ssl
 import urllib.request
+import platform
+import os
+import logging
+
+logger = logging.getLogger("uvicorn.error")
 
 @router.get("/network-diagnostics")
 def network_diagnostics_route():
-    """Live diagnostic check for outbound DNS, general HTTPS, and SMTP ports."""
-    results = {}
-    
-    # 1. DNS check for smtp.gmail.com
+    """
+    Live diagnostic check for outbound DNS, general HTTPS, default network route, and SMTP ports.
+    Logs full diagnostic summary to server logs and returns structured JSON.
+    """
+    # 1. Environment Detection
+    is_render = bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID"))
+    if is_render:
+        runtime_desc = "Render Cloud Web Service (Linux Container)"
+    elif platform.system() == "Windows":
+        runtime_desc = "Local Windows Host"
+    elif platform.system() == "Linux":
+        runtime_desc = "Linux Environment / Container"
+    else:
+        runtime_desc = f"{platform.system()} Environment"
+
+    # 2. Check Default Network Route
+    default_route_status = "ABSENT"
+    default_route_detail = "No route found"
+    try:
+        # Use UDP connect (doesn't send packets) to inspect local outbound routing table
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        default_route_status = "PRESENT"
+        default_route_detail = f"Local route active via {local_ip}"
+    except Exception as e:
+        default_route_detail = str(e)
+
+    # 3. DNS Resolution for smtp.gmail.com
+    dns_status = "FAIL"
+    resolved_ips = []
+    dns_error = None
     try:
         ips = socket.gethostbyname_ex("smtp.gmail.com")
-        results["dns_resolution"] = {
-            "status": "PASS",
-            "host": "smtp.gmail.com",
-            "resolved_ips_count": len(ips[2])
-        }
+        resolved_ips = ips[2]
+        dns_status = "PASS"
     except Exception as e:
-        results["dns_resolution"] = {
-            "status": "FAIL",
-            "host": "smtp.gmail.com",
-            "error": str(e)
-        }
+        dns_error = str(e)
 
-    # 2. General Outbound HTTPS Internet Connectivity
+    # 4. General Outbound HTTPS Internet Connectivity (Port 443)
+    https_status = "FAIL"
+    https_code = None
+    https_error = None
     try:
         req = urllib.request.Request("https://www.google.com", headers={"User-Agent": "TERRAVYN/1.0"})
         with urllib.request.urlopen(req, timeout=5) as res:
-            results["general_https_outbound"] = {
-                "status": "PASS" if res.status == 200 else "FAIL",
-                "http_status": res.status
-            }
+            https_code = res.status
+            if res.status == 200:
+                https_status = "PASS"
     except Exception as e:
-        results["general_https_outbound"] = {"status": "FAIL", "error": str(e)}
+        https_error = str(e)
 
-    # 3. Test TCP 587, 465, 2525
+    # 5. Test SMTP TCP Ports 587, 465, 2525
+    smtp_results = {}
+    smtp_summary_log = {}
+
     for port in [587, 465, 2525]:
-        port_key = f"smtp_tcp_{port}"
         try:
             sock = socket.create_connection(("smtp.gmail.com", port), timeout=4)
             sock.close()
-            results[port_key] = {"status": "PASS", "port": port}
+            smtp_results[f"port_{port}"] = True
+            smtp_results[f"port_{port}_status"] = "PASS"
+            smtp_summary_log[port] = "PASS"
         except OSError as e:
-            results[port_key] = {
-                "status": "FAIL",
-                "port": port,
-                "error_type": type(e).__name__,
-                "error": str(e)
-            }
+            err_cls = "NETWORK_UNREACHABLE" if e.errno in (101, 10051) else type(e).__name__
+            smtp_results[f"port_{port}"] = False
+            smtp_results[f"port_{port}_error"] = f"{err_cls}: {str(e)}"
+            smtp_summary_log[port] = f"FAIL ({err_cls} - {str(e)})"
         except Exception as e:
-            results[port_key] = {
-                "status": "FAIL",
-                "port": port,
-                "error_type": type(e).__name__,
-                "error": str(e)
-            }
+            smtp_results[f"port_{port}"] = False
+            smtp_results[f"port_{port}_error"] = f"{type(e).__name__}: {str(e)}"
+            smtp_summary_log[port] = f"FAIL ({type(e).__name__} - {str(e)})"
 
-    return results
+    # 6. Determine Classification (Case A vs Case B)
+    if https_status == "PASS" and not any([smtp_results.get("port_587"), smtp_results.get("port_465"), smtp_results.get("port_2525")]):
+        diagnosis_case = "CASE B: General HTTPS outbound internet is OPEN and functional (PASS), but outbound SMTP ports (587, 465, 2525) are blocked by the host/network egress firewall."
+    elif https_status == "FAIL":
+        diagnosis_case = "CASE A: Environment has no outbound internet access."
+    else:
+        diagnosis_case = "SMTP connection succeeded."
+
+    # 7. Server-Side Diagnostic Logging
+    logger.info("==================== [NETWORK DIAGNOSTICS] ====================")
+    logger.info(f"Runtime: {runtime_desc} ({platform.platform()})")
+    logger.info(f"Default Network Route: {default_route_status} ({default_route_detail})")
+    logger.info(f"DNS smtp.gmail.com: {dns_status} (Resolved: {len(resolved_ips)} IPs)")
+    logger.info(f"General HTTPS (Port 443): {https_status} (HTTP {https_code})")
+    logger.info(f"SMTP TCP 587: {smtp_summary_log[587]}")
+    logger.info(f"SMTP TCP 465: {smtp_summary_log[465]}")
+    logger.info(f"SMTP TCP 2525: {smtp_summary_log[2525]}")
+    logger.info(f"Conclusion: {diagnosis_case}")
+    logger.info("================================================================")
+
+    return {
+        "environment": {
+            "runtime": runtime_desc,
+            "platform": platform.platform(),
+            "python_version": platform.python_version()
+        },
+        "default_route": {
+            "status": default_route_status,
+            "detail": default_route_detail
+        },
+        "dns": {
+            "status": dns_status,
+            "smtp_gmail_resolves": dns_status == "PASS",
+            "resolved_count": len(resolved_ips),
+            "error": dns_error
+        },
+        "https": {
+            "status": https_status,
+            "outbound_connectivity": https_status == "PASS",
+            "http_status": https_code,
+            "error": https_error
+        },
+        "smtp": smtp_results,
+        "diagnosis": diagnosis_case
+    }
 
 @router.post("/check-username")
 def check_username(request: UsernameCheckRequest, db: Session = Depends(get_db)):
