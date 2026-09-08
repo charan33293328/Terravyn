@@ -19,13 +19,10 @@ class Settings(BaseSettings):
     SMTP_FROM_NAME: str = "TERRAVYN"
     SMTP_USE_TLS: bool = True
     
-    # Modern HTTP Email Delivery APIs (Supported by Render/Cloud platforms over HTTPS port 443)
-    EMAIL_API_KEY: str = ""
-    EMAIL_FROM: str = ""
-    EMAIL_FROM_NAME: str = "TERRAVYN"
-    RESEND_API_KEY: str = ""
-    BREVO_API_KEY: str = ""
+    # SendGrid HTTPS Email Delivery API (Port 443)
     SENDGRID_API_KEY: str = ""
+    SENDGRID_FROM_EMAIL: str = ""
+    SENDGRID_FROM_NAME: str = "Terravyn"
     
     FRONTEND_URL: str = "https://terravyn.vercel.app"
     

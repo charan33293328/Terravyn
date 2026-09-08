@@ -31,7 +31,7 @@ app = FastAPI(title="TERRAVYN Smart Agriculture API")
 async def startup_event():
     import logging
     logger = logging.getLogger("uvicorn.error")
-    logger.info("Terravyn Email Service: HTTPS API mode")
+    logger.info("Terravyn Email Service: SendGrid HTTPS API mode")
     logger.info("Application Startup: Logging registered routes...")
     for route in app.routes:
         if hasattr(route, "methods") and hasattr(route, "path"):

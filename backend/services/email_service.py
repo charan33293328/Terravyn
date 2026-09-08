@@ -66,133 +66,85 @@ def _mask_email(email: str) -> str:
         pass
     return "recipient"
 
-def _send_http_api_email(recipient_email: str, subject: str, plain_text: str, html_content: str) -> bool:
+def _send_sendgrid_email(recipient_email: str, subject: str, plain_text: str, html_content: str = "") -> bool:
     """
-    Sends transactional email exclusively via HTTPS REST API (Port 443).
-    Bypasses cloud provider SMTP firewall blocks completely.
+    Sends transactional email via SendGrid Mail Send API over HTTPS (Port 443).
+    Endpoint: POST https://api.sendgrid.com/v3/mail/send
     """
-    from_name = (settings.EMAIL_FROM_NAME or settings.SMTP_FROM_NAME or "TERRAVYN").strip()
-    from_email = (settings.EMAIL_FROM or settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME or "onboarding@resend.dev").strip()
+    api_key = (settings.SENDGRID_API_KEY or "").strip()
+    from_email = (settings.SENDGRID_FROM_EMAIL or settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME or "notifications@terravyn.com").strip()
+    from_name = (settings.SENDGRID_FROM_NAME or settings.SMTP_FROM_NAME or "Terravyn").strip()
     masked_rcpt = _mask_email(recipient_email)
-    
-    # Check keys
-    generic_key = (settings.EMAIL_API_KEY or "").strip()
-    resend_key = (settings.RESEND_API_KEY or "").strip() or (generic_key if generic_key.startswith("re_") or not generic_key.startswith(("xkeysib-", "SG.")) else "")
-    brevo_key = (settings.BREVO_API_KEY or "").strip() or (generic_key if generic_key.startswith("xkeysib-") else "")
-    sendgrid_key = (settings.SENDGRID_API_KEY or "").strip() or (generic_key if generic_key.startswith("SG.") else "")
-    
-    # 1. Resend API (https://resend.com) - Primary HTTPS Provider (Port 443)
-    if resend_key:
-        try:
-            logger.info(f"[EMAIL HTTP API] Dispatching email via Resend HTTPS API to {masked_rcpt}...")
-            # If from_email is a free public mailbox without custom DNS verification, use Resend's verified test sender
-            sender_address = from_email
-            if "@gmail.com" in sender_address.lower() or "@yahoo." in sender_address.lower() or "@outlook." in sender_address.lower():
-                sender_address = "onboarding@resend.dev"
-                
-            payload = {
-                "from": f"{from_name} <{sender_address}>",
-                "to": [recipient_email],
-                "subject": subject,
-                "text": plain_text,
-                "html": html_content
-            }
-            req = urllib.request.Request(
-                "https://api.resend.com/emails",
-                data=json.dumps(payload).encode("utf-8"),
-                headers={
-                    "Authorization": f"Bearer {resend_key}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "TERRAVYN/1.0"
-                },
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=12) as response:
-                if response.status in (200, 201):
-                    logger.info(f"[EMAIL HTTP SUCCESS] Email accepted and delivered via Resend HTTPS API to {masked_rcpt}")
-                    return True
-        except urllib.error.HTTPError as http_err:
-            err_body = http_err.read().decode("utf-8", errors="ignore")
-            logger.error(f"[EMAIL RESEND ERROR] HTTP {http_err.code}: {err_body}")
-        except Exception as e:
-            logger.error(f"[EMAIL RESEND ERROR] {type(e).__name__}: {str(e)}")
 
-    # 2. Brevo API (https://brevo.com / Sendinblue) (Port 443)
-    if brevo_key:
-        try:
-            logger.info(f"[EMAIL HTTP API] Dispatching email via Brevo HTTPS API to {masked_rcpt}...")
-            payload = {
-                "sender": {"name": from_name, "email": from_email},
-                "to": [{"email": recipient_email}],
-                "subject": subject,
-                "textContent": plain_text,
-                "htmlContent": html_content
-            }
-            req = urllib.request.Request(
-                "https://api.brevo.com/v3/smtp/email",
-                data=json.dumps(payload).encode("utf-8"),
-                headers={
-                    "api-key": brevo_key,
-                    "Content-Type": "application/json",
-                    "User-Agent": "TERRAVYN/1.0"
-                },
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=12) as response:
-                if response.status in (200, 201):
-                    logger.info(f"[EMAIL HTTP SUCCESS] Email accepted and delivered via Brevo HTTPS API to {masked_rcpt}")
-                    return True
-        except urllib.error.HTTPError as http_err:
-            err_body = http_err.read().decode("utf-8", errors="ignore")
-            logger.error(f"[EMAIL BREVO ERROR] HTTP {http_err.code}: {err_body}")
-        except Exception as e:
-            logger.error(f"[EMAIL BREVO ERROR] {type(e).__name__}: {str(e)}")
+    if not api_key:
+        logger.error("[EMAIL CONFIG ERROR] SENDGRID_API_KEY is not configured in environment variables.")
+        return False
 
-    # 3. SendGrid API (Port 443)
-    if sendgrid_key:
-        try:
-            logger.info(f"[EMAIL HTTP API] Dispatching email via SendGrid HTTPS API to {masked_rcpt}...")
-            payload = {
-                "personalizations": [{"to": [{"email": recipient_email}]}],
-                "from": {"email": from_email, "name": from_name},
-                "subject": subject,
-                "content": [
-                    {"type": "text/plain", "value": plain_text},
-                    {"type": "text/html", "value": html_content}
-                ]
+    if not from_email:
+        logger.error("[EMAIL CONFIG ERROR] SENDGRID_FROM_EMAIL is not configured in environment variables.")
+        return False
+
+    # Construct SendGrid v3 Mail Send payload
+    content_list = []
+    if plain_text:
+        content_list.append({"type": "text/plain", "value": plain_text})
+    if html_content:
+        content_list.append({"type": "text/html", "value": html_content})
+    if not content_list:
+        content_list.append({"type": "text/plain", "value": subject})
+
+    payload = {
+        "personalizations": [
+            {
+                "to": [{"email": recipient_email}]
             }
-            req = urllib.request.Request(
-                "https://api.sendgrid.com/v3/mail/send",
-                data=json.dumps(payload).encode("utf-8"),
-                headers={
-                    "Authorization": f"Bearer {sendgrid_key}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "TERRAVYN/1.0"
-                },
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=12) as response:
-                if response.status in (200, 202):
-                    logger.info(f"[EMAIL HTTP SUCCESS] Email accepted and delivered via SendGrid HTTPS API to {masked_rcpt}")
-                    return True
-        except urllib.error.HTTPError as http_err:
-            err_body = http_err.read().decode("utf-8", errors="ignore")
+        ],
+        "from": {
+            "email": from_email,
+            "name": from_name
+        },
+        "subject": subject,
+        "content": content_list
+    }
+
+    try:
+        logger.info(f"[EMAIL HTTP API] Dispatching email via SendGrid HTTPS API to {masked_rcpt}...")
+        req = urllib.request.Request(
+            "https://api.sendgrid.com/v3/mail/send",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": "Terravyn/1.0"
+            },
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=12) as response:
+            # SendGrid returns HTTP 202 Accepted on success
+            if response.status in (200, 201, 202):
+                logger.info(f"[EMAIL SENDGRID] Email request accepted by SendGrid HTTPS API for {masked_rcpt}")
+                return True
+    except urllib.error.HTTPError as http_err:
+        err_body = http_err.read().decode("utf-8", errors="ignore")
+        if http_err.code in (401, 403):
+            logger.error(f"[EMAIL SENDGRID AUTH ERROR] HTTP {http_err.code}: Check SENDGRID_API_KEY or verified sender identity for '{from_email}'.")
+        elif http_err.code == 429:
+            logger.error("[EMAIL SENDGRID RATE LIMIT] HTTP 429: Rate limit exceeded on SendGrid.")
+        else:
             logger.error(f"[EMAIL SENDGRID ERROR] HTTP {http_err.code}: {err_body}")
-        except Exception as e:
-            logger.error(f"[EMAIL SENDGRID ERROR] {type(e).__name__}: {str(e)}")
+    except urllib.error.URLError as url_err:
+        logger.error(f"[EMAIL SENDGRID NETWORK ERROR] Network error reaching api.sendgrid.com: {str(url_err.reason)}")
+    except Exception as e:
+        logger.error(f"[EMAIL SENDGRID UNEXPECTED ERROR] {type(e).__name__}: {str(e)}")
 
-    if not (resend_key or brevo_key or sendgrid_key or generic_key):
-        logger.error("[EMAIL CONFIG ERROR] No HTTPS Email API Key configured. Please set RESEND_API_KEY or EMAIL_API_KEY in Render Environment.")
-    
     return False
 
 def _dispatch_email(recipient_email: str, subject: str, plain_text: str, html_content: str = "") -> bool:
-    """Dispatches email exclusively via HTTPS REST API (Port 443)."""
-    return _send_http_api_email(recipient_email, subject, plain_text, html_content)
+    """Dispatches email exclusively via SendGrid HTTPS Mail Send API (Port 443)."""
+    return _send_sendgrid_email(recipient_email, subject, plain_text, html_content)
 
 def send_invoice_email(customer_email: str, customer_name: str, order_id: str, invoice_number: str, payment_status: str, pdf_path: str = None) -> bool:
-    from_name = (settings.EMAIL_FROM_NAME or settings.SMTP_FROM_NAME or "TERRAVYN").strip()
-    from_email = (settings.EMAIL_FROM or settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME or "support@terravyn.com").strip()
+    from_name = (settings.SENDGRID_FROM_NAME or "Terravyn").strip()
     subject = "TERRAVYN Order Confirmation - Invoice Details"
 
     body = f"""Dear {customer_name},
@@ -212,8 +164,7 @@ The TERRAVYN Team
     return _dispatch_email(customer_email, subject, body, "")
 
 def send_order_status_email(customer_email: str, customer_name: str, order_id: str, status: str, tracking_details: dict = None) -> bool:
-    from_name = (settings.EMAIL_FROM_NAME or settings.SMTP_FROM_NAME or "TERRAVYN").strip()
-    from_email = (settings.EMAIL_FROM or settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME or "support@terravyn.com").strip()
+    from_name = (settings.SENDGRID_FROM_NAME or "Terravyn").strip()
     subject = f"TERRAVYN Order Update: {status}"
 
     tracking_section = ""
