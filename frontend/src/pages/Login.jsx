@@ -26,12 +26,12 @@ const Login = () => {
       }
       return { valid: true, type: 'email' };
     } else {
-      const usernameRegex = /^[a-zA-Z0-9_.-]{3,30}$/;
+      const usernameRegex = /^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]{3,30}$/;
       if (trimmed.length < 3) {
         return { valid: false, message: 'Username must be at least 3 characters long.' };
       }
       if (!usernameRegex.test(trimmed)) {
-        return { valid: false, message: 'Username can only contain letters, numbers, underscores, hyphens, and dots.' };
+        return { valid: false, message: 'Username can only contain letters, numbers, and allowed special characters.' };
       }
       return { valid: true, type: 'username' };
     }

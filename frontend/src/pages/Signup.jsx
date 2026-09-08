@@ -72,20 +72,37 @@ const Signup = () => {
 
   // Validation functions
   const validateFullName = (name) => {
-    const trimmed = (name || '').trim();
+    const raw = (name || '');
+    const trimmed = raw.trim();
     if (!trimmed) return 'Full name is required.';
-    if (trimmed.length < 3) return 'Full name must be at least 3 characters.';
+    if (trimmed.length < 3) return 'Full name must be at least 3 characters long.';
     if (trimmed.length > 100) return 'Full name cannot exceed 100 characters.';
-    if (!/^[a-zA-Z\s.'-]+$/.test(trimmed)) return 'Full name can only contain letters, spaces, hyphens, and dots.';
+    
+    if (/[0-9]/.test(raw)) {
+      return 'Full name cannot contain numbers.';
+    }
+    if (/[^a-zA-Z\s]/.test(raw)) {
+      return 'Full name can only contain letters and a single space between words.';
+    }
+    if (/\s{2,}/.test(raw)) {
+      return 'Only a single space is allowed between words.';
+    }
+    if (!/^[a-zA-Z]+(?: [a-zA-Z]+)*$/.test(trimmed)) {
+      return 'Full name must contain only letters with a single space between words.';
+    }
     return '';
   };
 
   const validateUsername = (uname) => {
     const trimmed = (uname || '').trim();
     if (!trimmed) return 'Username is required.';
-    if (trimmed.length < 4) return 'Username must be at least 4 characters.';
+    if (/\s/.test(trimmed)) return 'Username cannot contain spaces.';
+    if (trimmed.length < 4) return 'Username must be at least 4 characters long.';
     if (trimmed.length > 30) return 'Username cannot exceed 30 characters.';
-    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) return 'Username can only contain letters, numbers, and underscores.';
+    if (!/[a-zA-Z0-9]/.test(trimmed)) return 'Username must contain alphanumeric characters.';
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?_]/.test(trimmed)) {
+      return 'Username must contain at least one special character (e.g. _, -, ., @, #).';
+    }
     return '';
   };
 
@@ -478,10 +495,14 @@ const Signup = () => {
                       </div>
                     )}
                   </div>
-                  {touched.full_name && fieldErrors.full_name && (
+                  {touched.full_name && fieldErrors.full_name ? (
                     <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
                       <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                       <span>{fieldErrors.full_name}</span>
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Letters only with a single space between words.
                     </p>
                   )}
                 </div>
@@ -511,7 +532,7 @@ const Signup = () => {
                           ? 'border-emerald-400 focus:border-emerald-500 focus:ring-emerald-500'
                           : 'border-slate-300 focus:ring-brand focus:border-brand'
                       }`}
-                      placeholder="e.g. ramesh_k"
+                      placeholder="e.g. ramesh_99 or farmer@123"
                       value={formData.username}
                       onChange={handleChange}
                     />
@@ -539,7 +560,7 @@ const Signup = () => {
                     </p>
                   ) : (
                     <p className="mt-1 text-xs text-slate-500">
-                      4-30 alphanumeric characters or underscores.
+                      4-30 alphanumeric characters with at least 1 special character (e.g. _, -, ., @, #).
                     </p>
                   )}
                 </div>
