@@ -10,7 +10,7 @@ import { fetchHomepage, fetchFAQs, fetchPublicSettings } from '../api/publicCms'
 const getMediaUrl = (path) => {
   if (!path) return '';
   if (path.startsWith('http')) return path;
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
   return `${baseUrl}${path}`;
 };
 

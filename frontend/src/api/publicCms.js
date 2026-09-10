@@ -3,7 +3,7 @@
  * Fetches published content from the backend with language resolution.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 const BASE = `${API_BASE_URL}/api/public`;
 
 /**

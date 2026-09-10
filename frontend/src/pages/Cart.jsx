@@ -57,7 +57,7 @@ const Cart = () => {
     // Keep it open until successful or handled otherwise, 
     // or we can close it, but usually we just transition state
     setCheckoutStep(CheckoutStep.IDLE);
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
     const itemsPayload = cartItems.map(i => ({ productId: i.product_id, quantity: i.quantity }));
 
     if (paymentInfo.paymentMethod === 'ONLINE') {

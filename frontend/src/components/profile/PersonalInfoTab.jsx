@@ -31,7 +31,7 @@ export default function PersonalInfoTab() {
       setFullName(res.data.full_name || '');
       setUsername(res.data.username || '');
       if (res.data.profile_photo) {
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
         setPhotoPreview(res.data.profile_photo.startsWith('http') ? res.data.profile_photo : `${baseUrl}${res.data.profile_photo}`);
       }
     } catch (err) {

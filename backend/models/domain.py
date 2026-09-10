@@ -9,6 +9,7 @@ class RoleEnum(str, enum.Enum):
     admin = "admin"
     support_agent = "support_agent"
     operations_manager = "operations_manager"
+    farmer = "farmer"
     user = "user"
 
 class User(Base):

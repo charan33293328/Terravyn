@@ -18,19 +18,16 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = ""
     SMTP_FROM_NAME: str = "TERRAVYN"
     SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False
+    SMTP_TIMEOUT: int = 15
     
-    # SendGrid HTTPS Email Delivery API (Port 443)
-    SENDGRID_API_KEY: str = ""
-    SENDGRID_FROM_EMAIL: str = ""
-    SENDGRID_FROM_NAME: str = "Terravyn"
-    
-    FRONTEND_URL: str = "https://terravyn.vercel.app"
+    FRONTEND_URL: str = "http://localhost:5173"
     
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_PHONE_NUMBER: str = ""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", "backend/.env"), extra="ignore")
 
 settings = Settings()
 

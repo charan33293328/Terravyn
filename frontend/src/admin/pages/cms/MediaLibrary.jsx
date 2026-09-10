@@ -125,7 +125,7 @@ const MediaLibrary = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {media.map((asset) => {
             const Icon = getIcon(asset.file_type);
-            const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+            const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
             const fullUrl = asset.file_path.startsWith('http') ? asset.file_path : `${baseUrl}${asset.file_path}`;
             
             return (

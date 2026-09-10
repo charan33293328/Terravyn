@@ -107,7 +107,7 @@ const BrandingSettingsTab = () => {
             <div>
               <label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-1">Main Platform Logo</label>
               <input type="text" name="platform_logo" value={data.platform_logo || ''} onChange={handleChange} placeholder="/static/media/images/logo.png" className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand/50 mb-2" />
-              {data.platform_logo && <img src={data.platform_logo.startsWith('http') ? data.platform_logo : `${import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com'}${data.platform_logo}`} alt="Preview" className="h-16 object-contain bg-slate-100 dark:bg-slate-800 p-2 rounded-lg border" />}
+              {data.platform_logo && <img src={data.platform_logo.startsWith('http') ? data.platform_logo : `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}${data.platform_logo}`} alt="Preview" className="h-16 object-contain bg-slate-100 dark:bg-slate-800 p-2 rounded-lg border" />}
             </div>
             <div>
               <label className="block text-sm font-bold text-slate-700 dark:text-slate-200 mb-1">Favicon</label>

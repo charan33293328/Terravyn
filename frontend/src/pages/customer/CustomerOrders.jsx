@@ -22,7 +22,7 @@ const CustomerOrders = () => {
 
   const fetchOrders = async () => {
     try {
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
       const res = await fetch(`${baseUrl}/api/user/orders`, {
         headers: getAuthHeaders()
       });

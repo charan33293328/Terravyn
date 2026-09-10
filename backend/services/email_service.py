@@ -1,11 +1,16 @@
 import logging
-from database.connection import settings
 import os
+import socket
+import ssl
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
+from email.utils import formataddr, formatdate, make_msgid
 from email_validator import validate_email, EmailNotValidError, EmailSyntaxError, EmailUndeliverableError
 from fastapi import HTTPException, status
-import json
-import urllib.request
-import urllib.error
+
+from database.connection import settings
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -66,85 +71,250 @@ def _mask_email(email: str) -> str:
         pass
     return "recipient"
 
-def _send_sendgrid_email(recipient_email: str, subject: str, plain_text: str, html_content: str = "") -> bool:
+def _send_smtp_email(
+    recipient_email: str,
+    subject: str,
+    plain_text: str,
+    html_content: str = "",
+    attachment_path: str = None
+) -> bool:
     """
-    Sends transactional email via SendGrid Mail Send API over HTTPS (Port 443).
-    Endpoint: POST https://api.sendgrid.com/v3/mail/send
+    Sends transactional email via standard SMTP.
+    Configurable via environment variables (SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD,
+    SMTP_FROM_EMAIL, SMTP_FROM_NAME, SMTP_USE_TLS, SMTP_USE_SSL, SMTP_TIMEOUT).
     """
-    api_key = (settings.SENDGRID_API_KEY or "").strip()
-    from_email = (settings.SENDGRID_FROM_EMAIL or settings.SMTP_FROM_EMAIL or settings.SMTP_USERNAME or "notifications@terravyn.com").strip()
-    from_name = (settings.SENDGRID_FROM_NAME or settings.SMTP_FROM_NAME or "Terravyn").strip()
+    host = (settings.SMTP_HOST or "").strip()
+    port = settings.SMTP_PORT or 587
+    username = (settings.SMTP_USERNAME or "").strip()
+    password = (settings.SMTP_PASSWORD or "").strip()
+    from_email = (settings.SMTP_FROM_EMAIL or username or "no-reply@terravyn.com").strip()
+    from_name = (settings.SMTP_FROM_NAME or "TERRAVYN").strip()
+    use_tls = bool(settings.SMTP_USE_TLS)
+    use_ssl = bool(settings.SMTP_USE_SSL)
+    timeout = settings.SMTP_TIMEOUT or 15
     masked_rcpt = _mask_email(recipient_email)
 
-    if not api_key:
-        logger.error("[EMAIL CONFIG ERROR] SENDGRID_API_KEY is not configured in environment variables.")
+    if not host:
+        logger.error("[EMAIL SMTP CONFIG ERROR] SMTP_HOST is not configured in environment variables.")
         return False
 
     if not from_email:
-        logger.error("[EMAIL CONFIG ERROR] SENDGRID_FROM_EMAIL is not configured in environment variables.")
+        logger.error("[EMAIL SMTP CONFIG ERROR] SMTP_FROM_EMAIL (or SMTP_USERNAME) is not configured in environment variables.")
         return False
 
-    # Construct SendGrid v3 Mail Send payload
-    content_list = []
+    # Create base MIME container
+    if attachment_path and os.path.isfile(attachment_path):
+        msg = MIMEMultipart("mixed")
+        body_container = MIMEMultipart("alternative")
+        msg.attach(body_container)
+    else:
+        msg = MIMEMultipart("alternative")
+        body_container = msg
+
+    # Set MIME headers
+    msg["Subject"] = subject
+    msg["From"] = formataddr((from_name, from_email))
+    msg["To"] = recipient_email
+    msg["Date"] = formatdate(localtime=True)
+    domain_part = from_email.split("@")[-1] if "@" in from_email else None
+    msg["Message-ID"] = make_msgid(domain=domain_part)
+
+    # Attach plain text and HTML alternatives
     if plain_text:
-        content_list.append({"type": "text/plain", "value": plain_text})
+        body_container.attach(MIMEText(plain_text, "plain", "utf-8"))
     if html_content:
-        content_list.append({"type": "text/html", "value": html_content})
-    if not content_list:
-        content_list.append({"type": "text/plain", "value": subject})
+        body_container.attach(MIMEText(html_content, "html", "utf-8"))
+    if not plain_text and not html_content:
+        body_container.attach(MIMEText(subject, "plain", "utf-8"))
 
-    payload = {
-        "personalizations": [
-            {
-                "to": [{"email": recipient_email}]
-            }
-        ],
-        "from": {
-            "email": from_email,
-            "name": from_name
-        },
-        "subject": subject,
-        "content": content_list
-    }
+    # Attach file if provided and exists
+    if attachment_path and os.path.isfile(attachment_path):
+        try:
+            with open(attachment_path, "rb") as f:
+                part = MIMEApplication(f.read(), Name=os.path.basename(attachment_path))
+                part["Content-Disposition"] = f'attachment; filename="{os.path.basename(attachment_path)}"'
+                msg.attach(part)
+        except Exception as e:
+            logger.warning(f"[EMAIL SMTP ATTACHMENT WARNING] Could not attach file {attachment_path}: {str(e)}")
 
+    server = None
     try:
-        logger.info(f"[EMAIL HTTP API] Dispatching email via SendGrid HTTPS API to {masked_rcpt}...")
-        req = urllib.request.Request(
-            "https://api.sendgrid.com/v3/mail/send",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "User-Agent": "Terravyn/1.0"
-            },
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=12) as response:
-            # SendGrid returns HTTP 202 Accepted on success
-            if response.status in (200, 201, 202):
-                logger.info(f"[EMAIL SENDGRID] Email request accepted by SendGrid HTTPS API for {masked_rcpt}")
-                return True
-    except urllib.error.HTTPError as http_err:
-        err_body = http_err.read().decode("utf-8", errors="ignore")
-        if http_err.code in (401, 403):
-            logger.error(f"[EMAIL SENDGRID AUTH ERROR] HTTP {http_err.code}: Check SENDGRID_API_KEY or verified sender identity for '{from_email}'.")
-        elif http_err.code == 429:
-            logger.error("[EMAIL SENDGRID RATE LIMIT] HTTP 429: Rate limit exceeded on SendGrid.")
+        logger.info(f"[EMAIL SMTP] SMTP email dispatch initiated to {masked_rcpt} via {host}:{port}...")
+
+        if use_ssl:
+            context = ssl.create_default_context()
+            server = smtplib.SMTP_SSL(host=host, port=port, context=context, timeout=timeout)
+            server.ehlo()
         else:
-            logger.error(f"[EMAIL SENDGRID ERROR] HTTP {http_err.code}: {err_body}")
-    except urllib.error.URLError as url_err:
-        logger.error(f"[EMAIL SENDGRID NETWORK ERROR] Network error reaching api.sendgrid.com: {str(url_err.reason)}")
+            server = smtplib.SMTP(host=host, port=port, timeout=timeout)
+            server.ehlo()
+            if use_tls:
+                context = ssl.create_default_context()
+                server.starttls(context=context)
+                server.ehlo()
+
+        if username and password:
+            server.login(username, password)
+
+        server.send_message(msg)
+        logger.info(f"[EMAIL SMTP] SMTP email accepted by host for {masked_rcpt}")
+        return True
+
+    except smtplib.SMTPAuthenticationError:
+        logger.error(f"[EMAIL SMTP AUTH ERROR] Authentication failed on {host}:{port}. Check SMTP_USERNAME and SMTP_PASSWORD.")
+    except smtplib.SMTPConnectError as e:
+        logger.error(f"[EMAIL SMTP CONNECT ERROR] Failed to connect to {host}:{port}: {str(e)}")
+    except smtplib.SMTPServerDisconnected as e:
+        logger.error(f"[EMAIL SMTP DISCONNECT ERROR] SMTP server disconnected unexpectedly ({host}:{port}): {str(e)}")
+    except smtplib.SMTPResponseException as e:
+        logger.error(f"[EMAIL SMTP RESPONSE ERROR] SMTP server responded with code {e.smtp_code}: {e.smtp_error}")
+    except ssl.SSLError as e:
+        logger.error(f"[EMAIL SMTP SSL ERROR] SSL/TLS handshake failed on {host}:{port}: {str(e)}")
+    except (socket.timeout, TimeoutError):
+        logger.error(f"[EMAIL SMTP TIMEOUT] SMTP connection or response timed out ({timeout}s) for {host}:{port}")
+    except OSError as e:
+        err_msg = str(e)
+        if e.errno in (101, 10051):
+            logger.error(f"[EMAIL SMTP NETWORK UNREACHABLE] [Errno {e.errno}] Network is unreachable connecting to {host}:{port}. Host outbound SMTP traffic blocked.")
+        else:
+            logger.error(f"[EMAIL SMTP OS ERROR] [Errno {e.errno}] Failed to connect to {host}:{port}: {err_msg}")
     except Exception as e:
-        logger.error(f"[EMAIL SENDGRID UNEXPECTED ERROR] {type(e).__name__}: {str(e)}")
+        logger.error(f"[EMAIL SMTP UNEXPECTED ERROR] {type(e).__name__}: {str(e)}")
+    finally:
+        if server:
+            try:
+                server.quit()
+            except Exception:
+                try:
+                    server.close()
+                except Exception:
+                    pass
 
     return False
 
-def _dispatch_email(recipient_email: str, subject: str, plain_text: str, html_content: str = "") -> bool:
-    """Dispatches email exclusively via SendGrid HTTPS Mail Send API (Port 443)."""
-    return _send_sendgrid_email(recipient_email, subject, plain_text, html_content)
+def test_smtp_connection() -> dict:
+    """
+    Safely tests the configured SMTP server without logging credentials or sending real emails.
+    Verifies DNS resolution, TCP connectivity, TLS/SSL negotiation, and authentication.
+    """
+    host = (settings.SMTP_HOST or "").strip()
+    port = settings.SMTP_PORT or 587
+    username = (settings.SMTP_USERNAME or "").strip()
+    password = (settings.SMTP_PASSWORD or "").strip()
+    use_tls = bool(settings.SMTP_USE_TLS)
+    use_ssl = bool(settings.SMTP_USE_SSL)
+    timeout = settings.SMTP_TIMEOUT or 10
 
-def send_invoice_email(customer_email: str, customer_name: str, order_id: str, invoice_number: str, payment_status: str, pdf_path: str = None) -> bool:
-    from_name = (settings.SENDGRID_FROM_NAME or "Terravyn").strip()
+    results = {
+        "configured_host": host or "NOT CONFIGURED",
+        "configured_port": port,
+        "security_mode": "SSL" if use_ssl else ("STARTTLS" if use_tls else "PLAIN"),
+        "dns": {"status": "NOT_RUN", "resolved_ips": [], "error": None},
+        "tcp": {"status": "NOT_RUN", "error": None},
+        "tls_ssl": {"status": "NOT_RUN", "error": None},
+        "auth": {"status": "NOT_RUN", "error": None},
+        "overall_status": "FAIL",
+        "summary": ""
+    }
+
+    if not host:
+        results["summary"] = "SMTP_HOST is not configured in environment variables."
+        return results
+
+    # 1. DNS Resolution
+    try:
+        ips = socket.gethostbyname_ex(host)
+        results["dns"]["status"] = "PASS"
+        results["dns"]["resolved_ips"] = ips[2]
+    except Exception as e:
+        results["dns"]["status"] = "FAIL"
+        results["dns"]["error"] = str(e)
+        results["summary"] = f"DNS resolution failed for {host}: {str(e)}"
+        return results
+
+    # 2. TCP Connection & Protocol Handshake
+    server = None
+    try:
+        if use_ssl:
+            context = ssl.create_default_context()
+            server = smtplib.SMTP_SSL(host=host, port=port, context=context, timeout=timeout)
+            results["tcp"]["status"] = "PASS"
+            results["tls_ssl"]["status"] = "PASS"
+            server.ehlo()
+        else:
+            server = smtplib.SMTP(host=host, port=port, timeout=timeout)
+            results["tcp"]["status"] = "PASS"
+            server.ehlo()
+            if use_tls:
+                context = ssl.create_default_context()
+                server.starttls(context=context)
+                server.ehlo()
+                results["tls_ssl"]["status"] = "PASS"
+            else:
+                results["tls_ssl"]["status"] = "SKIPPED (Plain SMTP)"
+
+        # 3. Authentication Check
+        if username and password:
+            server.login(username, password)
+            results["auth"]["status"] = "PASS"
+        else:
+            results["auth"]["status"] = "SKIPPED (No credentials provided)"
+
+        results["overall_status"] = "PASS"
+        results["summary"] = f"Successfully connected and authenticated with SMTP host {host}:{port}"
+
+    except smtplib.SMTPAuthenticationError:
+        results["auth"]["status"] = "FAIL"
+        results["auth"]["error"] = "Authentication failed. Please verify SMTP_USERNAME and SMTP_PASSWORD."
+        results["summary"] = "SMTP authentication failed."
+    except ssl.SSLError as e:
+        results["tls_ssl"]["status"] = "FAIL"
+        results["tls_ssl"]["error"] = f"SSL/TLS error: {str(e)}"
+        results["summary"] = f"TLS/SSL handshake failed with {host}:{port}"
+    except (socket.timeout, TimeoutError):
+        results["tcp"]["status"] = "FAIL"
+        results["tcp"]["error"] = f"Connection timed out ({timeout}s)"
+        results["summary"] = f"Connection to {host}:{port} timed out."
+    except OSError as e:
+        results["tcp"]["status"] = "FAIL"
+        if e.errno in (101, 10051):
+            results["tcp"]["error"] = f"[Errno {e.errno}] Network unreachable. Outbound SMTP blocked by hosting environment."
+            results["summary"] = "Hosting environment network blocks outbound SMTP traffic."
+        else:
+            results["tcp"]["error"] = str(e)
+            results["summary"] = f"Failed to connect to {host}:{port}: {str(e)}"
+    except Exception as e:
+        results["summary"] = f"SMTP diagnostic encountered {type(e).__name__}: {str(e)}"
+    finally:
+        if server:
+            try:
+                server.quit()
+            except Exception:
+                try:
+                    server.close()
+                except Exception:
+                    pass
+
+    return results
+
+def _dispatch_email(
+    recipient_email: str,
+    subject: str,
+    plain_text: str,
+    html_content: str = "",
+    attachment_path: str = None
+) -> bool:
+    """Dispatches email via standard configurable SMTP."""
+    return _send_smtp_email(recipient_email, subject, plain_text, html_content, attachment_path)
+
+def send_invoice_email(
+    customer_email: str,
+    customer_name: str,
+    order_id: str,
+    invoice_number: str,
+    payment_status: str,
+    pdf_path: str = None
+) -> bool:
     subject = "TERRAVYN Order Confirmation - Invoice Details"
 
     body = f"""Dear {customer_name},
@@ -161,32 +331,90 @@ If you have any questions or need further assistance, please contact us at suppo
 Best regards,
 The TERRAVYN Team
 """
-    return _dispatch_email(customer_email, subject, body, "")
 
-def send_order_status_email(customer_email: str, customer_name: str, order_id: str, status: str, tracking_details: dict = None) -> bool:
-    from_name = (settings.SENDGRID_FROM_NAME or "Terravyn").strip()
+    html_body = f"""<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 20px; color: #1e293b;">
+  <div style="max-width: 550px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; padding: 24px; border: 1px solid #e2e8f0;">
+    <h2 style="color: #10b981; margin-top: 0;">Order Confirmation</h2>
+    <p>Dear <strong>{customer_name}</strong>,</p>
+    <p>Thank you for choosing TERRAVYN! We have successfully received your order.</p>
+    
+    <div style="background-color: #f1f5f9; border-radius: 8px; padding: 16px; margin: 20px 0;">
+      <p style="margin: 4px 0;"><strong>Order ID:</strong> {order_id}</p>
+      <p style="margin: 4px 0;"><strong>Invoice Number:</strong> {invoice_number}</p>
+      <p style="margin: 4px 0;"><strong>Payment Status:</strong> {payment_status}</p>
+    </div>
+    
+    <p style="font-size: 13px; color: #64748b;">If you have any questions or need further assistance, please contact us at support@terravyn.com.</p>
+    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+    <p style="font-size: 12px; color: #94a3b8; margin-bottom: 0;">Regards,<br><strong>TERRAVYN Smart Agriculture</strong></p>
+  </div>
+</body>
+</html>"""
+
+    return _dispatch_email(customer_email, subject, body, html_body, pdf_path)
+
+def send_order_status_email(
+    customer_email: str,
+    customer_name: str,
+    order_id: str,
+    status: str,
+    tracking_details: dict = None
+) -> bool:
     subject = f"TERRAVYN Order Update: {status}"
 
-    tracking_section = ""
-    if tracking_details and tracking_details.get('courier_name'):
-        tracking_section = f"""
+    tracking_section_text = ""
+    tracking_section_html = ""
+    if tracking_details and tracking_details.get("courier_name"):
+        courier = tracking_details.get("courier_name")
+        trk_num = tracking_details.get("tracking_number") or "N/A"
+        trk_url = tracking_details.get("tracking_url") or "N/A"
+        est_del = tracking_details.get("estimated_delivery_date") or "Pending"
+
+        tracking_section_text = f"""
 Tracking Information:
-- Courier: {tracking_details.get('courier_name')}
-- Tracking Number: {tracking_details.get('tracking_number') or 'N/A'}
-- Tracking URL: {tracking_details.get('tracking_url') or 'N/A'}
-- Estimated Delivery: {tracking_details.get('estimated_delivery_date') or 'Pending'}
+- Courier: {courier}
+- Tracking Number: {trk_num}
+- Tracking URL: {trk_url}
+- Estimated Delivery: {est_del}
 """
+        tracking_section_html = f"""
+        <div style="background-color: #f1f5f9; border-radius: 8px; padding: 16px; margin: 20px 0;">
+          <h4 style="margin: 0 0 10px 0; color: #334155;">Tracking Information</h4>
+          <p style="margin: 4px 0;"><strong>Courier:</strong> {courier}</p>
+          <p style="margin: 4px 0;"><strong>Tracking Number:</strong> {trk_num}</p>
+          <p style="margin: 4px 0;"><strong>Estimated Delivery:</strong> {est_del}</p>
+          {f'<p style="margin: 4px 0;"><a href="{trk_url}" style="color: #10b981; font-weight: bold;">Track Package</a></p>' if trk_url != 'N/A' else ''}
+        </div>
+        """
 
     body = f"""Dear {customer_name},
 
 Your TERRAVYN order ({order_id}) status has been updated to: {status}.
-{tracking_section}
+{tracking_section_text}
 If you have any questions, please contact us at support@terravyn.com or call +91 800-TERRAVYN.
 
 Best regards,
 The TERRAVYN Team
 """
-    return _dispatch_email(customer_email, subject, body, "")
+
+    html_body = f"""<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 20px; color: #1e293b;">
+  <div style="max-width: 550px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; padding: 24px; border: 1px solid #e2e8f0;">
+    <h2 style="color: #10b981; margin-top: 0;">Order Status Update</h2>
+    <p>Dear <strong>{customer_name}</strong>,</p>
+    <p>Your TERRAVYN order <strong>{order_id}</strong> status has been updated to: <strong style="color: #10b981;">{status}</strong>.</p>
+    {tracking_section_html}
+    <p style="font-size: 13px; color: #64748b;">If you have any questions or need further assistance, please contact us at support@terravyn.com.</p>
+    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+    <p style="font-size: 12px; color: #94a3b8; margin-bottom: 0;">Regards,<br><strong>TERRAVYN Smart Agriculture</strong></p>
+  </div>
+</body>
+</html>"""
+
+    return _dispatch_email(customer_email, subject, body, html_body)
 
 def send_otp_email(recipient_email: str, otp: str, recipient_name: str) -> bool:
     subject = "TERRAVYN Email Verification Code"

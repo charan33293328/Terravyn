@@ -15,7 +15,7 @@ const CustomerOrderDetails = () => {
     const fetchOrderDetails = async () => {
       try {
         const token = localStorage.getItem('token');
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
         const res = await fetch(`${baseUrl}/api/user/orders/${orderId}`, {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -162,7 +162,7 @@ const CustomerOrderDetails = () => {
               
               <button 
                 onClick={() => {
-                  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+                  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
                   window.open(`${baseUrl}/api/invoices/${order.order_id}/view`, '_blank');
                 }}
                 className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition-colors text-sm flex items-center justify-center gap-2"
@@ -172,7 +172,7 @@ const CustomerOrderDetails = () => {
               
               <button 
                 onClick={() => {
-                  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+                  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
                   window.open(`${baseUrl}/api/invoices/${order.order_id}/download`, '_blank');
                 }}
                 className="w-full py-2 bg-brand/10 hover:bg-brand/20 text-brand font-medium rounded-lg transition-colors text-sm flex items-center justify-center gap-2"

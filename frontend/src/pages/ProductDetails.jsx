@@ -45,7 +45,7 @@ const ProductDetails = () => {
       const s = await fetchPublicSettings();
       setSettings(s);
       
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
       try {
         const res = await axios.get(`${baseUrl}/api/public/products/${slug}`);
         const p = res.data;
@@ -93,7 +93,7 @@ const ProductDetails = () => {
 
   const handlePaymentSubmit = async (paymentInfo) => {
     setIsPaymentModalOpen(false);
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
     if (paymentInfo.paymentMethod === 'ONLINE') {
       setToastMessage('Redirecting to secure payment gateway...');

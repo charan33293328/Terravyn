@@ -173,7 +173,7 @@ const CustomerDetailsModal = ({ isOpen, onClose, onSubmit }) => {
     }
 
     try {
-      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'https://terravyn-backend.onrender.com';
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
       const res = await axios.post(`${baseUrl}/api/uploads/identity-document`, formData, {
         onUploadProgress: (progressEvent) => {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);

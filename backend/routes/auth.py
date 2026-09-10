@@ -13,7 +13,7 @@ import secrets
 from auth.security import get_password_hash, verify_password, create_access_token, get_current_active_user
 from models.domain import User, VerificationRecord
 from utils.verification import generate_otp, hash_otp, send_phone_otp
-from services.email_service import send_otp_email, send_password_reset_email, validate_email_for_terravyn
+from services.email_service import send_otp_email, send_password_reset_email, validate_email_for_terravyn, test_smtp_connection
 from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -30,7 +30,7 @@ logger = logging.getLogger("uvicorn.error")
 @router.get("/network-diagnostics")
 def network_diagnostics_route():
     """
-    Live diagnostic check for outbound DNS, general HTTPS, default network route, and SMTP ports.
+    Live diagnostic check for outbound DNS, general HTTPS, default network route, and configured SMTP connectivity.
     Logs full diagnostic summary to server logs and returns structured JSON.
     """
     # 1. Environment Detection
@@ -48,7 +48,6 @@ def network_diagnostics_route():
     default_route_status = "ABSENT"
     default_route_detail = "No route found"
     try:
-        # Use UDP connect (doesn't send packets) to inspect local outbound routing table
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         local_ip = s.getsockname()[0]
@@ -58,18 +57,7 @@ def network_diagnostics_route():
     except Exception as e:
         default_route_detail = str(e)
 
-    # 3. DNS Resolution for smtp.gmail.com
-    dns_status = "FAIL"
-    resolved_ips = []
-    dns_error = None
-    try:
-        ips = socket.gethostbyname_ex("smtp.gmail.com")
-        resolved_ips = ips[2]
-        dns_status = "PASS"
-    except Exception as e:
-        dns_error = str(e)
-
-    # 4. General Outbound HTTPS Internet Connectivity (Port 443)
+    # 3. General Outbound HTTPS Internet Connectivity (Port 443)
     https_status = "FAIL"
     https_code = None
     https_error = None
@@ -82,46 +70,31 @@ def network_diagnostics_route():
     except Exception as e:
         https_error = str(e)
 
-    # 5. Test SMTP TCP Ports 587, 465, 2525
-    smtp_results = {}
-    smtp_summary_log = {}
+    # 4. Safe SMTP Diagnostic Test
+    smtp_test = test_smtp_connection()
 
-    for port in [587, 465, 2525]:
-        try:
-            sock = socket.create_connection(("smtp.gmail.com", port), timeout=4)
-            sock.close()
-            smtp_results[f"port_{port}"] = True
-            smtp_results[f"port_{port}_status"] = "PASS"
-            smtp_summary_log[port] = "PASS"
-        except OSError as e:
-            err_cls = "NETWORK_UNREACHABLE" if e.errno in (101, 10051) else type(e).__name__
-            smtp_results[f"port_{port}"] = False
-            smtp_results[f"port_{port}_error"] = f"{err_cls}: {str(e)}"
-            smtp_summary_log[port] = f"FAIL ({err_cls} - {str(e)})"
-        except Exception as e:
-            smtp_results[f"port_{port}"] = False
-            smtp_results[f"port_{port}_error"] = f"{type(e).__name__}: {str(e)}"
-            smtp_summary_log[port] = f"FAIL ({type(e).__name__} - {str(e)})"
-
-    # 6. Determine Classification (Case A vs Case B)
-    if https_status == "PASS" and not any([smtp_results.get("port_587"), smtp_results.get("port_465"), smtp_results.get("port_2525")]):
-        diagnosis_case = "CASE B: General HTTPS outbound internet is OPEN and functional (PASS), but outbound SMTP ports (587, 465, 2525) are blocked by the host/network egress firewall."
+    # 5. Determine Classification
+    if smtp_test.get("overall_status") == "PASS":
+        diagnosis_case = "SMTP implementation: READY. SMTP network connection: PASS."
+    elif https_status == "PASS" and smtp_test.get("tcp", {}).get("status") == "FAIL":
+        diagnosis_case = "SMTP implementation: READY. SMTP network access from deployment: BLOCKED (Outbound SMTP ports blocked by hosting provider)."
     elif https_status == "FAIL":
-        diagnosis_case = "CASE A: Environment has no outbound internet access."
+        diagnosis_case = "Environment has no outbound internet connectivity."
     else:
-        diagnosis_case = "SMTP connection succeeded."
+        diagnosis_case = f"SMTP diagnostic: {smtp_test.get('summary', 'Check configuration.')}"
 
-    # 7. Server-Side Diagnostic Logging
-    logger.info("==================== [NETWORK DIAGNOSTICS] ====================")
+    # 6. Server-Side Diagnostic Logging
+    logger.info("==================== [NETWORK & SMTP DIAGNOSTICS] ====================")
     logger.info(f"Runtime: {runtime_desc} ({platform.platform()})")
     logger.info(f"Default Network Route: {default_route_status} ({default_route_detail})")
-    logger.info(f"DNS smtp.gmail.com: {dns_status} (Resolved: {len(resolved_ips)} IPs)")
     logger.info(f"General HTTPS (Port 443): {https_status} (HTTP {https_code})")
-    logger.info(f"SMTP TCP 587: {smtp_summary_log[587]}")
-    logger.info(f"SMTP TCP 465: {smtp_summary_log[465]}")
-    logger.info(f"SMTP TCP 2525: {smtp_summary_log[2525]}")
+    logger.info(f"Configured SMTP Host: {smtp_test.get('configured_host')}:{smtp_test.get('configured_port')}")
+    logger.info(f"SMTP DNS Status: {smtp_test.get('dns', {}).get('status')}")
+    logger.info(f"SMTP TCP Status: {smtp_test.get('tcp', {}).get('status')}")
+    logger.info(f"SMTP TLS/SSL Status: {smtp_test.get('tls_ssl', {}).get('status')}")
+    logger.info(f"SMTP Auth Status: {smtp_test.get('auth', {}).get('status')}")
     logger.info(f"Conclusion: {diagnosis_case}")
-    logger.info("================================================================")
+    logger.info("=======================================================================")
 
     return {
         "environment": {
@@ -133,19 +106,13 @@ def network_diagnostics_route():
             "status": default_route_status,
             "detail": default_route_detail
         },
-        "dns": {
-            "status": dns_status,
-            "smtp_gmail_resolves": dns_status == "PASS",
-            "resolved_count": len(resolved_ips),
-            "error": dns_error
-        },
         "https": {
             "status": https_status,
             "outbound_connectivity": https_status == "PASS",
             "http_status": https_code,
             "error": https_error
         },
-        "smtp": smtp_results,
+        "smtp": smtp_test,
         "diagnosis": diagnosis_case
     }
 
@@ -462,7 +429,7 @@ def forgot_password_route(request: ForgotPasswordRequest, db: Session = Depends(
     db.add(record)
     db.commit()
     
-    frontend_url = (settings.FRONTEND_URL or "https://terravyn.vercel.app").rstrip("/")
+    frontend_url = (settings.FRONTEND_URL or "http://localhost:5173").rstrip("/")
     reset_link = f"{frontend_url}/reset-password?email={user.email}&token={token}"
     
     email_sent = send_password_reset_email(user.email, reset_link, user.full_name)

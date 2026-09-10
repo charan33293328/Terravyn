@@ -28,15 +28,15 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="TERRAVYN Smart Agriculture API")
 
 @app.on_event("startup")
-async def startup_event():
+async def startup_email_and_routes():
     import logging
+    from database.connection import settings
     logger = logging.getLogger("uvicorn.error")
-    logger.info("Terravyn Email Service: SendGrid HTTPS API mode")
+    logger.info(f"Terravyn Email Service: SMTP mode (Host: {settings.SMTP_HOST or 'Not configured'}, Port: {settings.SMTP_PORT})")
     logger.info("Application Startup: Logging registered routes...")
     for route in app.routes:
         if hasattr(route, "methods") and hasattr(route, "path"):
             logger.info(f"{route.methods} {route.path}")
-    logger.info("Application Startup: Validating environment variables...")
 
 import logging
 logger = logging.getLogger("uvicorn.error")
@@ -255,25 +255,13 @@ import urllib.request
 
 @app.get("/api/health/network-diagnostics")
 def network_diagnostics():
-    """Diagnostic check for outbound DNS, general HTTPS, and SMTP ports."""
+    """Diagnostic check for outbound DNS, general HTTPS, and configured SMTP connectivity."""
+    from services.email_service import test_smtp_connection
+    from database.connection import settings
+    
     results = {}
     
-    # 1. DNS check for smtp.gmail.com
-    try:
-        ips = socket.gethostbyname_ex("smtp.gmail.com")
-        results["dns_resolution"] = {
-            "status": "PASS",
-            "host": "smtp.gmail.com",
-            "resolved_ips_count": len(ips[2])
-        }
-    except Exception as e:
-        results["dns_resolution"] = {
-            "status": "FAIL",
-            "host": "smtp.gmail.com",
-            "error": str(e)
-        }
-
-    # 2. General Outbound HTTPS Internet Connectivity
+    # 1. General Outbound HTTPS Internet Connectivity
     try:
         req = urllib.request.Request("https://www.google.com", headers={"User-Agent": "TERRAVYN/1.0"})
         with urllib.request.urlopen(req, timeout=5) as res:
@@ -284,26 +272,6 @@ def network_diagnostics():
     except Exception as e:
         results["general_https_outbound"] = {"status": "FAIL", "error": str(e)}
 
-    # 3. Test TCP 587, 465, 2525
-    for port in [587, 465, 2525]:
-        port_key = f"smtp_tcp_{port}"
-        try:
-            sock = socket.create_connection(("smtp.gmail.com", port), timeout=4)
-            sock.close()
-            results[port_key] = {"status": "PASS", "port": port}
-        except OSError as e:
-            results[port_key] = {
-                "status": "FAIL",
-                "port": port,
-                "error_type": type(e).__name__,
-                "error": str(e)
-            }
-        except Exception as e:
-            results[port_key] = {
-                "status": "FAIL",
-                "port": port,
-                "error_type": type(e).__name__,
-                "error": str(e)
-            }
-
+    # 2. Configured SMTP Diagnostic
+    results["smtp_diagnostic"] = test_smtp_connection()
     return results
